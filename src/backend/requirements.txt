@@ -1,0 +1,17 @@
+fastapi
+uvicorn
+pandas
+langchain
+langchain-openai
+numpy
+networkx
+exa_py
+langchain_experimental
+spacy
+python-dotenv
+beautifulsoup4
+trafilatura
+lxml
+thefuzz
+requests
+
