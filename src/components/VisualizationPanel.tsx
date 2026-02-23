@@ -1,229 +1,216 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { FilterState } from '../types';
-import { getDemographicsSummary } from '../data/seattleDemographics';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
 import Analysis from './Analysis';
+import RegionalComparison from './RegionalComparison';
+import { BarChart as BarChartIcon, TrendingUp, Info } from 'lucide-react';
 
 interface VisualizationPanelProps {
   filters: FilterState;
+  selectedRegion?: string;
 }
 
-const neighborhoods = [
-  'Ballard',
-  'Capitol Hill',
-  'Downtown',
-  'Fremont',
-  'Queen Anne',
-  'University District',
-  'South Lake Union'
-];
-
-const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters }) => {
-  const getNeighborhoodMetrics = () => {
-    return neighborhoods.map(name => {
-      const data = getDemographicsSummary(name);
-      if (!data) return null;
-
-      return {
-        id: name.toLowerCase().replace(/\s+/g, '-'),
-        name,
-        currentValue: data.medianIncome / 1000,
-        description: `Median income and demographics for ${name}`,
-        unit: 'k',
-        domain: [0, 120],
-        historicalValues: [],
-        forecastValues: []
-      };
-    }).filter(Boolean);
+interface RegionData {
+  state: string;
+  profile: {
+    demographics?: {
+      population?: number;
+      median_household_income?: number;
+      poverty_rate?: number;
+      education_bachelor_and_above?: number;
+      unemployment_rate?: number;
+    };
+    economics?: {
+      indicators?: any;
+    };
   };
+}
 
-  const filterDataByYearRange = (data: { year: number; value: number }[]) => {
-    return data.filter(point => 
-      point.year >= filters.yearRange[0] && 
-      point.year <= filters.yearRange[1]
+type VisualizationType = 'overview' | 'comparison' | 'analysis';
+
+const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, selectedRegion = 'United States' }) => {
+  const [regionData, setRegionData] = useState<RegionData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [visualizationType, setVisualizationType] = useState<VisualizationType>('overview');
+
+  useEffect(() => {
+    const fetchRegionData = async () => {
+      setLoading(true);
+      setError(null);
+      try {
+        const response = await fetch(`http://localhost:8000/api/enriched-state/${selectedRegion}`);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch data for ${selectedRegion}`);
+        }
+        const data = await response.json();
+        if (data.success && data.profile) {
+          setRegionData(data);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Error fetching data');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchRegionData();
+  }, [selectedRegion]);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <div className="text-gray-600 dark:text-gray-400">Loading data for {selectedRegion}...</div>
+      </div>
     );
-  };
+  }
 
-  const calculateSafeDomain = (data: { year: number; value: number }[]): [number, number] => {
-    if (!data.length) return [0, 100]; // Safe default for empty data
-    const values = data.map(p => p.value);
-    const maxValue = Math.max(...values);
-    const minValue = Math.min(...values);
-    
-    // If all values are 0 or maxValue equals minValue, return a safe domain
-    if (maxValue === minValue) {
-      const baseValue = maxValue || 100; // Use 100 if maxValue is 0
-      return [0, baseValue * 1.2]; // Add 20% padding
-    }
-    
-    // Add 10% padding to the domain
-    const padding = (maxValue - minValue) * 0.1;
-    return [Math.max(0, minValue - padding), maxValue + padding];
-  };
+  if (error) {
+    return (
+      <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-800 dark:text-red-200 px-4 py-3 rounded">
+        {error}
+      </div>
+    );
+  }
 
-  const metrics = getNeighborhoodMetrics();
+  if (!regionData) {
+    return (
+      <div className="bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded">
+        No data available for {selectedRegion}
+      </div>
+    );
+  }
+
+  const demographics = regionData.profile?.demographics || {};
+  const economics = regionData.profile?.economics || {};
+  
+  // Extract latest unemployment rate from time series data
+  const unemploymentData = economics.indicators?.unemployment_rate?.data || {};
+  const latestUnemploymentRate = unemploymentData[Object.keys(unemploymentData).sort().pop() as string];
 
   const renderCharts = () => {
-    if (filters.timeframe === 'current') {
-      return (
-        <div className="grid grid-cols-1 gap-6 mb-6">
-          <BarChart 
-            metrics={metrics}
-            title="Median Income by Neighborhood ($K)"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {neighborhoods.map(name => {
-              const data = getDemographicsSummary(name);
-              if (!data) return null;
+    // Determine which metrics to display based on filter selections
+    const metricsToShow = {
+      showPopulation: filters.metrics.includes('population'),
+      showIncome: filters.metrics.includes('median-income'),
+      showPoverty: true,
+      showEducation: true,
+      showUnemployment: true
+    };
 
-              return (
-                <div key={name} className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-                  <h3 className="text-lg font-semibold mb-4 text-gray-800 dark:text-gray-200">{name}</h3>
-                  <div className="space-y-4">
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Population</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                        {data.totalPopulation.toLocaleString()}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Median Age</p>
-                      <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
-                        {data.medianAge.toFixed(1)} years
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 dark:text-gray-400">Age Distribution</p>
-                      <div className="flex gap-2 mt-1">
-                        <div className="flex-1 bg-blue-100 dark:bg-blue-900 rounded p-2">
-                          <p className="text-xs text-blue-800 dark:text-blue-200">Children</p>
-                          <p className="text-sm font-bold text-blue-900 dark:text-blue-100">
-                            {data.ageDistribution.children}%
-                          </p>
-                        </div>
-                        <div className="flex-1 bg-purple-100 dark:bg-purple-900 rounded p-2">
-                          <p className="text-xs text-purple-800 dark:text-purple-200">Working</p>
-                          <p className="text-sm font-bold text-purple-900 dark:text-purple-100">
-                            {data.ageDistribution.workingAge}%
-                          </p>
-                        </div>
-                        <div className="flex-1 bg-amber-100 dark:bg-amber-900 rounded p-2">
-                          <p className="text-xs text-amber-800 dark:text-amber-200">Elderly</p>
-                          <p className="text-sm font-bold text-amber-900 dark:text-amber-100">
-                            {data.ageDistribution.elderly}%
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
+    return (
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <div className="flex justify-between items-start mb-6">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+                {selectedRegion} - Key Demographics
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                Timeframe: {filters.timeframe === 'current' ? 'Current Data' : filters.timeframe === 'historical' ? 'Historical Trends' : 'Forecast'}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {metricsToShow.showPopulation && demographics.population !== undefined && (
+              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border-l-4 border-blue-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Population</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  {(demographics.population / 1000000).toFixed(1)}M
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Total residents</p>
+              </div>
+            )}
+            {metricsToShow.showIncome && demographics.median_household_income !== undefined && (
+              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 border-l-4 border-green-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Median Income</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  ${(demographics.median_household_income / 1000).toFixed(0)}K
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Household annual</p>
+              </div>
+            )}
+            {metricsToShow.showPoverty && demographics.poverty_rate !== undefined && (
+              <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-4 border-l-4 border-yellow-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Poverty Rate</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  {demographics.poverty_rate.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Below poverty line</p>
+              </div>
+            )}
+            {metricsToShow.showEducation && demographics.education_bachelor_and_above !== undefined && (
+              <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-4 border-l-4 border-purple-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Education</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  {demographics.education_bachelor_and_above.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Bachelor's degree+</p>
+              </div>
+            )}
+            {metricsToShow.showUnemployment && latestUnemploymentRate !== undefined && (
+              <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 border-l-4 border-red-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Unemployment</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  {latestUnemploymentRate.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Current rate</p>
+              </div>
+            )}
           </div>
         </div>
-      );
-    } else if (filters.timeframe === 'historical') {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {neighborhoods.map(name => {
-            const data = getDemographicsSummary(name);
-            if (!data?.history) return null;
-
-            // Only show selected metrics
-            const charts = [];
-            
-            if (filters.metrics.includes('population')) {
-              const filteredData = filterDataByYearRange(data.history.population);
-              if (filteredData.length > 0) {
-                charts.push(
-                  <LineChart
-                    key={`${name}-population`}
-                    title={`${name} - Population Trend`}
-                    data={filteredData}
-                    unit=""
-                    domain={calculateSafeDomain(filteredData)}
-                    color="#4F46E5"
-                  />
-                );
-              }
-            }
-
-            if (filters.metrics.includes('median-income')) {
-              const filteredData = filterDataByYearRange(data.history.medianIncome);
-              if (filteredData.length > 0) {
-                charts.push(
-                  <LineChart
-                    key={`${name}-income`}
-                    title={`${name} - Median Income Trend`}
-                    data={filteredData}
-                    unit="$"
-                    domain={calculateSafeDomain(filteredData)}
-                    color="#10B981"
-                  />
-                );
-              }
-            }
-
-            return charts;
-          })}
-        </div>
-      );
-    } else if (filters.timeframe === 'forecast') {
-      return (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {neighborhoods.map(name => {
-            const data = getDemographicsSummary(name);
-            if (!data?.forecast) return null;
-
-            // Only show selected metrics
-            const charts = [];
-            
-            if (filters.metrics.includes('population')) {
-              const filteredData = filterDataByYearRange(data.forecast.population);
-              if (filteredData.length > 0) {
-                charts.push(
-                  <LineChart
-                    key={`${name}-population`}
-                    title={`${name} - Population Forecast`}
-                    data={filteredData}
-                    unit=""
-                    domain={calculateSafeDomain(filteredData)}
-                    color="#4F46E5"
-                  />
-                );
-              }
-            }
-
-            if (filters.metrics.includes('median-income')) {
-              const filteredData = filterDataByYearRange(data.forecast.medianIncome);
-              if (filteredData.length > 0) {
-                charts.push(
-                  <LineChart
-                    key={`${name}-income`}
-                    title={`${name} - Median Income Forecast`}
-                    data={filteredData}
-                    unit="$"
-                    domain={calculateSafeDomain(filteredData)}
-                    color="#10B981"
-                  />
-                );
-              }
-            }
-
-            return charts;
-          })}
-        </div>
-      );
-    }
-    
-    return null;
+      </div>
+    );
   };
 
   return (
     <div>
-      {renderCharts()}
-      <Analysis filters={filters} />
+      {/* Visualization Type Selector */}
+      <div className="flex gap-2 mb-6 flex-wrap">
+        <button
+          onClick={() => setVisualizationType('overview')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'overview'
+              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+        >
+          <BarChartIcon className="w-4 h-4" />
+          Overview
+        </button>
+        <button
+          onClick={() => setVisualizationType('comparison')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'comparison'
+              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+        >
+          <TrendingUp className="w-4 h-4" />
+          Compare to USA
+        </button>
+        <button
+          onClick={() => setVisualizationType('analysis')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'analysis'
+              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+        >
+          <Info className="w-4 h-4" />
+          Economic Insights
+        </button>
+      </div>
+
+      {/* Content based on selected visualization type */}
+      {visualizationType === 'overview' && renderCharts()}
+      {visualizationType === 'comparison' && regionData && (
+        <RegionalComparison selectedRegion={selectedRegion} regionData={regionData} />
+      )}
+      {visualizationType === 'analysis' && regionData && (
+        <Analysis filters={filters} selectedRegion={selectedRegion} regionData={regionData} />
+      )}
     </div>
   );
 };

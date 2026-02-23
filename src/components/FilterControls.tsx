@@ -1,16 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FilterState } from '../types';
-import { Sliders, Calendar, MapPin, LineChart } from 'lucide-react';
+import { Sliders, Calendar, MapPin, LineChart, ChevronDown } from 'lucide-react';
+import { US_STATES, MAJOR_METRO_AREAS } from '../data/states';
 
 interface FilterControlsProps {
   filters: FilterState;
   onFilterChange: (newFilters: Partial<FilterState>) => void;
+  selectedRegion?: string;
+  onRegionChange?: (region: string) => void;
 }
 
-const FilterControls: React.FC<FilterControlsProps> = ({ filters, onFilterChange }) => {
-  const handleRegionChange = (region: FilterState['region']) => {
-    onFilterChange({ region });
-  };
+const FilterControls: React.FC<FilterControlsProps> = ({ 
+  filters, 
+  onFilterChange,
+  selectedRegion = 'United States',
+  onRegionChange
+}) => {
+  const [showStateDropdown, setShowStateDropdown] = useState(false);
+  const [showMetroDropdown, setShowMetroDropdown] = useState(false);
 
   const handleTimeframeChange = (timeframe: FilterState['timeframe']) => {
     // Reset year range based on timeframe
@@ -71,52 +78,111 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, onFilterChange
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4 mb-6">
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold flex items-center mb-3 text-gray-800 dark:text-gray-200">
-          <MapPin size={18} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
+      {/* Region Selection */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
+          <MapPin size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
           Region
         </h3>
-        <div className="flex space-x-2">
+        <div className="flex flex-wrap gap-3">
+          {/* United States Button */}
           <button
-            onClick={() => handleRegionChange('us')}
-            className={`px-4 py-2 rounded-md transition-colors ${
-              filters.region === 'us' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
+            onClick={() => {
+              setShowStateDropdown(false);
+              setShowMetroDropdown(false);
+              onRegionChange?.('United States');
+            }}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              selectedRegion === 'United States'
+                ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
                 : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
             }`}
           >
             United States
           </button>
-          <button
-            onClick={() => handleRegionChange('washington')}
-            className={`px-4 py-2 rounded-md transition-colors ${
-              filters.region === 'washington' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}
-          >
-            Washington
-          </button>
-          <button
-            onClick={() => handleRegionChange('comparison')}
-            className={`px-4 py-2 rounded-md transition-colors ${
-              filters.region === 'comparison' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
-            }`}
-          >
-            Comparison
-          </button>
+
+          {/* States Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowStateDropdown(!showStateDropdown);
+                setShowMetroDropdown(false);
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                US_STATES.includes(selectedRegion)
+                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              States
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            {showStateDropdown && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-40 max-h-64 overflow-y-auto">
+                {US_STATES.map((state) => (
+                  <button
+                    key={state}
+                    onClick={() => {
+                      onRegionChange?.(state);
+                      setShowStateDropdown(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${
+                      selectedRegion === state ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {state}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Metro Areas Dropdown */}
+          <div className="relative">
+            <button
+              onClick={() => {
+                setShowMetroDropdown(!showMetroDropdown);
+                setShowStateDropdown(false);
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+                MAJOR_METRO_AREAS.includes(selectedRegion)
+                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+              }`}
+            >
+              Metro Areas
+              <ChevronDown className="w-4 h-4" />
+            </button>
+            {showMetroDropdown && (
+              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-40 max-h-64 overflow-y-auto">
+                {MAJOR_METRO_AREAS.map((metro) => (
+                  <button
+                    key={metro}
+                    onClick={() => {
+                      onRegionChange?.(metro);
+                      setShowMetroDropdown(false);
+                    }}
+                    className={`w-full text-left px-4 py-2 hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${
+                      selectedRegion === metro ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                    }`}
+                  >
+                    {metro}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold flex items-center mb-3 text-gray-800 dark:text-gray-200">
-          <Calendar size={18} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+      {/* Timeframe Selection */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
+          <Calendar size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
           Timeframe
         </h3>
-        <div className="flex space-x-2">
+        <div className="flex flex-col space-y-2">
           <button
             onClick={() => handleTimeframeChange('current')}
             className={`px-4 py-2 rounded-md transition-colors ${
@@ -150,9 +216,10 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, onFilterChange
         </div>
       </div>
 
-      <div className="mb-4">
-        <h3 className="text-lg font-semibold flex items-center mb-3 text-gray-800 dark:text-gray-200">
-          <LineChart size={18} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+      {/* Metrics Selection */}
+      <div className="mb-6">
+        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
+          <LineChart size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
           Metrics
         </h3>
         <div className="space-y-2">
@@ -173,6 +240,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({ filters, onFilterChange
         </div>
       </div>
 
+      {/* Year Range Selection */}
       {filters.timeframe !== 'current' && (
         <div>
           <h3 className="text-lg font-semibold flex items-center mb-3 text-gray-800 dark:text-gray-200">
