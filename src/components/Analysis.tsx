@@ -1,83 +1,61 @@
 import React from 'react';
 import { FilterState } from '../types';
-import { getDemographicsSummary } from '../data/seattleDemographics';
 
 interface AnalysisProps {
   filters: FilterState;
+  selectedRegion?: string;
+  regionData?: any;
 }
 
-const Analysis: React.FC<AnalysisProps> = ({ filters }) => {
+interface RegionMetrics {
+  population?: number;
+  medianIncome?: number;
+  povertyRate?: number;
+  educationRate?: number;
+  unemploymentRate?: number;
+}
+
+const Analysis: React.FC<AnalysisProps> = ({ filters, selectedRegion = 'United States', regionData }) => {
   const getAnalysisText = (): { title: string; content: React.ReactNode } => {
-    const neighborhoods = [
-      'Ballard',
-      'Capitol Hill',
-      'Downtown',
-      'Fremont',
-      'Queen Anne',
-      'University District',
-      'South Lake Union'
-    ];
+    const demographics = regionData?.profile?.demographics || {};
+    
+    // Provide general regional insight
+    const medianIncome = demographics.median_household_income;
+    const population = demographics.population;
+    const povertyRate = demographics.poverty_rate;
+    const educationRate = demographics.education_bachelor_and_above;
 
-    const demographicsData = neighborhoods.map(name => ({
-      name,
-      data: getDemographicsSummary(name)
-    })).filter(item => item.data);
-
-    if (filters.timeframe === 'current') {
-      // Check if we have enough data for comparison
-      if (demographicsData.length < 2) {
-        return {
-          title: 'Data Availability Notice',
-          content: (
-            <p className="text-amber-600 dark:text-amber-400">
-              Insufficient neighborhood data available for detailed comparison. Please ensure multiple neighborhoods have complete demographic information.
-            </p>
-          )
-        };
-      }
-
-      // Sort neighborhoods by median income
-      const sortedByIncome = [...demographicsData].sort((a, b) => 
-        (b.data?.medianIncome || 0) - (a.data?.medianIncome || 0)
-      );
-
-      // Sort neighborhoods by population
-      const sortedByPopulation = [...demographicsData].sort((a, b) => 
-        (b.data?.totalPopulation || 0) - (a.data?.totalPopulation || 0)
-      );
-
-      // Find youngest and oldest neighborhoods by median age
-      const sortedByAge = [...demographicsData].sort((a, b) => 
-        (a.data?.medianAge || 0) - (b.data?.medianAge || 0)
-      );
-
-      return {
-        title: 'Seattle Neighborhoods Analysis',
-        content: (
-          <>
+    return {
+      title: `${selectedRegion} - Economic & Demographic Overview`,
+      content: (
+        <>
+          {medianIncome && (
             <p className="mb-3">
-              Among Seattle's major neighborhoods, {sortedByIncome[0].name} shows the highest median income at ${sortedByIncome[0].data?.medianIncome.toLocaleString()}, 
-              while {sortedByIncome[sortedByIncome.length - 1].name} has the lowest at ${sortedByIncome[sortedByIncome.length - 1].data?.medianIncome.toLocaleString()}.
+              <strong>{selectedRegion}</strong> has a median household income of <strong>${(medianIncome / 1000).toFixed(0)}K</strong>, 
+              which reflects the region's economic conditions and cost of living.
             </p>
+          )}
+          {population && (
             <p className="mb-3">
-              {sortedByPopulation[0].name} is the most populous neighborhood with {sortedByPopulation[0].data?.totalPopulation.toLocaleString()} residents, 
-              followed by {sortedByPopulation[1].name} with {sortedByPopulation[1].data?.totalPopulation.toLocaleString()} residents.
+              The region has a population of <strong>{(population / 1000000).toFixed(2)}M</strong> residents, 
+              indicating {population > 10000000 ? 'a large and diverse economic market' : 'a mid-sized regional economy'}.
             </p>
+          )}
+          {povertyRate && (
+            <p className="mb-3">
+              The poverty rate stands at <strong>{povertyRate.toFixed(1)}%</strong>, which provides context for understanding 
+              the economic disparities within the region.
+            </p>
+          )}
+          {educationRate && (
             <p>
-              The {sortedByAge[0].name} has the youngest median age at {sortedByAge[0].data?.medianAge.toFixed(1)} years, 
-              while {sortedByAge[sortedByAge.length - 1].name} has the highest at {sortedByAge[sortedByAge.length - 1].data?.medianAge.toFixed(1)} years.
+              Educational attainment is {educationRate > 30 ? 'notably high' : educationRate > 20 ? 'moderate' : 'relatively low'} with 
+              <strong> {educationRate.toFixed(1)}%</strong> of the population holding a bachelor's degree or higher.
             </p>
-          </>
-        )
-      };
-    } else {
-      return {
-        title: 'Neighborhood Comparison',
-        content: (
-          <p>Select the current timeframe to view neighborhood comparisons.</p>
-        )
-      };
-    }
+          )}
+        </>
+      )
+    };
   };
 
   const analysis = getAnalysisText();
@@ -88,10 +66,11 @@ const Analysis: React.FC<AnalysisProps> = ({ filters }) => {
       <div className="text-gray-700 dark:text-gray-300">
         {analysis.content}
       </div>
-      <div className="mt-4 bg-blue-50 dark:bg-blue-900 border-l-4 border-blue-500 p-3 rounded">
-        <h4 className="font-semibold text-blue-700 dark:text-blue-300 mb-1">Neighborhood Insights</h4>
-        <p className="text-blue-800 dark:text-blue-200 text-sm">
-          Seattle's neighborhoods show significant demographic and economic diversity, with distinct characteristics in terms of age distribution, population density, and income levels.
+      <div className="mt-4 bg-indigo-50 dark:bg-indigo-900 border-l-4 border-indigo-500 p-3 rounded">
+        <h4 className="font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Regional Insights</h4>
+        <p className="text-indigo-800 dark:text-indigo-200 text-sm">
+          Explore the Compare Regions page to see how {selectedRegion} stacks up against other states and metros. 
+          Use the chart options above to visualize different economic indicators.
         </p>
       </div>
     </div>

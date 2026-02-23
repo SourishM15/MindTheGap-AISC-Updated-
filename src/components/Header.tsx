@@ -14,10 +14,10 @@ const Header: React.FC = () => {
           </div>
         </Link>
         
-        <nav className="hidden md:flex space-x-6">
+        <nav className="hidden md:flex space-x-8">
           <Link to="/" className="text-white hover:text-indigo-200 transition-colors font-medium">Home</Link>
           <Link to="/dashboard" className="text-white hover:text-indigo-200 transition-colors font-medium">Dashboard</Link>
-          <Link to="/seattle" className="text-white hover:text-indigo-200 transition-colors font-medium">Seattle</Link>
+          <Link to="/compare" className="text-white hover:text-indigo-200 transition-colors font-medium">Compare Regions</Link>
           <a href="#" className="text-white hover:text-indigo-200 transition-colors font-medium">About</a>
         </nav>
         

@@ -11,7 +11,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
     {
       id: '1',
       role: 'system',
-      content: 'Welcome! Ask me about U.S. wealth inequality - income distribution, wealth gaps between different groups, historical trends since 1989, or breakdowns by demographics. I have comprehensive Federal Reserve data on national wealth patterns.',
+      content: 'Welcome! Ask me about U.S. wealth inequality - compare states and cities, explore income distribution, wealth gaps, historical trends, or demographic breakdowns. I have comprehensive government data on national, state, and metro area patterns.',
       timestamp: new Date()
     }
   ]);
@@ -52,12 +52,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
     setInputValue('');
 
     try {
-      const response = await fetch('http://localhost:8001/api/chat', {
+      // Build conversation history for context (excluding system message)
+      const conversationHistory = messages
+        .filter(m => m.role !== 'system')
+        .map(m => ({ role: m.role, content: m.content }));
+
+      const response = await fetch('http://localhost:8000/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ message: inputValue }),
+        body: JSON.stringify({ 
+          message: inputValue,
+          conversation_history: conversationHistory
+        }),
       });
 
       if (!response.ok) {
@@ -96,10 +104,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
     <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-md flex flex-col transition-all duration-300 ease-in-out ${
       isExpanded ? 'h-[500px]' : 'h-[300px]'
     }`}>
-      <div className="flex items-center justify-between bg-indigo-600 dark:bg-indigo-800 text-white rounded-t-lg p-3">
-        <h3 className="font-semibold flex items-center">
-          <MessageCircle size={18} className="mr-2" />
-          U.S. Wealth Inequality Assistant
+      <div className="flex items-center justify-between bg-indigo-600 dark:bg-indigo-800 text-white rounded-t-lg p-4">
+        <h3 className="font-semibold text-base flex items-center">
+          <MessageCircle size={20} className="mr-2" />
+          Wealth & Economics Assistant
         </h3>
         <button 
           onClick={toggleExpand}
@@ -117,7 +125,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
         </button>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 overflow-y-auto p-5">
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -144,13 +152,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
         <div ref={chatEndRef} />
       </div>
       
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-3">
+      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-4">
         <div className="flex">
           <input
             type="text"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask about U.S. wealth inequality..."
+            placeholder="Ask about states, cities, or U.S. inequality..."
             disabled={isProcessing}
             className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
           />
