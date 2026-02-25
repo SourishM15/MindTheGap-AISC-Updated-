@@ -44,6 +44,11 @@ build/
 venv/
 env/
 ENV/
+src/backend/venv/
+
+# Generated/cache files
+src/backend/embeddings_cache.json
+*.cache.json
 
 # Database files
 *.db
