@@ -2,9 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { FilterState } from '../types';
 import LineChart from './charts/LineChart';
 import BarChart from './charts/BarChart';
+import LorenzCurve from './charts/LorenzCurve';
+import StackedAreaChart from './charts/StackedAreaChart';
+import WaffleChart from './charts/WaffleChart';
 import Analysis from './Analysis';
 import RegionalComparison from './RegionalComparison';
-import { BarChart as BarChartIcon, TrendingUp, Info } from 'lucide-react';
+import { BarChart as BarChartIcon, TrendingUp, Info, PieChart, Grid3x3 } from 'lucide-react';
 
 interface VisualizationPanelProps {
   filters: FilterState;
@@ -27,7 +30,7 @@ interface RegionData {
   };
 }
 
-type VisualizationType = 'overview' | 'comparison' | 'analysis';
+type VisualizationType = 'overview' | 'comparison' | 'analysis' | 'lorenz' | 'stacked' | 'waffle';
 
 const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, selectedRegion = 'United States' }) => {
   const [regionData, setRegionData] = useState<RegionData | null>(null);
@@ -201,6 +204,48 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           <Info className="w-4 h-4" />
           Economic Insights
         </button>
+        
+        {/* New Advanced Visualizations */}
+        <div className="border-l border-gray-300 dark:border-gray-600 pl-2 ml-2" />
+        
+        <button
+          onClick={() => setVisualizationType('lorenz')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'lorenz'
+              ? 'bg-blue-600 dark:bg-blue-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+          title="Shows wealth distribution with Gini coefficient"
+        >
+          <PieChart className="w-4 h-4" />
+          Lorenz Curve
+        </button>
+        
+        <button
+          onClick={() => setVisualizationType('stacked')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'stacked'
+              ? 'bg-green-600 dark:bg-green-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+          title="Shows income distribution by decile over time"
+        >
+          <TrendingUp className="w-4 h-4" />
+          Stacked Distribution
+        </button>
+        
+        <button
+          onClick={() => setVisualizationType('waffle')}
+          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+            visualizationType === 'waffle'
+              ? 'bg-purple-600 dark:bg-purple-500 text-white'
+              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+          }`}
+          title="100-square grid showing population distribution"
+        >
+          <Grid3x3 className="w-4 h-4" />
+          Waffle Chart
+        </button>
       </div>
 
       {/* Content based on selected visualization type */}
@@ -211,8 +256,88 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       {visualizationType === 'analysis' && regionData && (
         <Analysis filters={filters} selectedRegion={selectedRegion} regionData={regionData} />
       )}
+      
+      {/* Advanced Visualizations */}
+      {visualizationType === 'lorenz' && (
+        <LorenzCurve
+          incomeData={generateLorenzData(regionData)}
+          title={`${selectedRegion} - Income Inequality (Lorenz Curve)`}
+        />
+      )}
+      
+      {visualizationType === 'stacked' && (
+        <StackedAreaChart
+          data={generateStackedAreaData(regionData)}
+          title={`${selectedRegion} - Income Distribution by Decile Over Time`}
+        />
+      )}
+      
+      {visualizationType === 'waffle' && (
+        <WaffleChart
+          data={generateWaffleData(regionData)}
+          title={`${selectedRegion} - Population Distribution by Income Bracket`}
+        />
+      )}
     </div>
   );
 };
+
+// Helper function to generate Lorenz curve data
+function generateLorenzData(regionData: RegionData | null) {
+  if (!regionData) return [];
+  
+  // Generate mock decile data - in production, this would come from API
+  return [
+    { bracket: 'Bottom 10%', percentage: 2, cumulativePopulation: 10, cumulativeWealth: 2 },
+    { bracket: '10-20%', percentage: 3.5, cumulativePopulation: 20, cumulativeWealth: 5.5 },
+    { bracket: '20-30%', percentage: 4.5, cumulativePopulation: 30, cumulativeWealth: 10 },
+    { bracket: '30-40%', percentage: 5.5, cumulativePopulation: 40, cumulativeWealth: 15.5 },
+    { bracket: '40-50%', percentage: 6.5, cumulativePopulation: 50, cumulativeWealth: 22 },
+    { bracket: '50-60%', percentage: 7.5, cumulativePopulation: 60, cumulativeWealth: 29.5 },
+    { bracket: '60-70%', percentage: 9, cumulativePopulation: 70, cumulativeWealth: 38.5 },
+    { bracket: '70-80%', percentage: 11, cumulativePopulation: 80, cumulativeWealth: 49.5 },
+    { bracket: '80-90%', percentage: 14, cumulativePopulation: 90, cumulativeWealth: 63.5 },
+    { bracket: 'Top 10%', percentage: 36.5, cumulativePopulation: 100, cumulativeWealth: 100 },
+  ];
+}
+
+// Helper function to generate stacked area chart data
+function generateStackedAreaData(regionData: RegionData | null) {
+  if (!regionData) return [];
+  
+  // Generate mock time series data
+  const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
+  return years.map(year => ({
+    year,
+    'Bottom 10%': 2 + Math.random() * 0.5,
+    '10-20%': 3.5 + Math.random() * 0.5,
+    '20-30%': 4.5 + Math.random() * 0.5,
+    '30-40%': 5.5 + Math.random() * 0.5,
+    '40-50%': 6.5 + Math.random() * 0.5,
+    '50-60%': 7.5 + Math.random() * 0.5,
+    '60-70%': 9 + Math.random() * 0.5,
+    '70-80%': 11 + Math.random() * 0.5,
+    '80-90%': 14 + Math.random() * 0.5,
+    'Top 10%': 36.5 + Math.random() * 1,
+  }));
+}
+
+// Helper function to generate waffle chart data
+function generateWaffleData(regionData: RegionData | null) {
+  if (!regionData) return [];
+  
+  return [
+    { bracket: 'Bottom 10%', percentage: 2, color: '#ef4444' },
+    { bracket: '10-20%', percentage: 3.5, color: '#f97316' },
+    { bracket: '20-30%', percentage: 4.5, color: '#eab308' },
+    { bracket: '30-40%', percentage: 5.5, color: '#84cc16' },
+    { bracket: '40-50%', percentage: 6.5, color: '#22c55e' },
+    { bracket: '50-60%', percentage: 7.5, color: '#10b981' },
+    { bracket: '60-70%', percentage: 9, color: '#14b8a6' },
+    { bracket: '70-80%', percentage: 11, color: '#06b6d4' },
+    { bracket: '80-90%', percentage: 14, color: '#0ea5e9' },
+    { bracket: 'Top 10%', percentage: 36.5, color: '#3b82f6' },
+  ];
+}
 
 export default VisualizationPanel;
