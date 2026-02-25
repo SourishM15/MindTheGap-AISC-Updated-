@@ -44,6 +44,7 @@ build/
 venv/
 env/
 ENV/
+src/venv/
 src/backend/venv/
 
 # Generated/cache files
