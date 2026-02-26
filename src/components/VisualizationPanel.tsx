@@ -162,7 +162,11 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         if (incomeRes.ok) {
           const iData = await incomeRes.json();
           if (cancelled) return;
-          if (iData.success && iData.state_specific && iData.data) {
+          // Only use state-specific income distribution for states, not metros.
+          // For metros, the endpoint returns the *parent state's* data (e.g. California
+          // for Los Angeles) which would mislabel state numbers as metro numbers in
+          // Lorenz / Waffle charts. Fall back to national DFA data instead.
+          if (!isMetro && iData.success && iData.state_specific && iData.data) {
             setIncomeDistData({ ...iData.data, state_specific: true });
           }
         }
@@ -306,16 +310,18 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 </p>
               </div>
             )}
-            {saipeData?.snapshot?.median_household_income != null && (
+            {/* Only show SAIPE income for states — for metros the ACS MSA income card above is
+                 already present and more accurate; showing both creates confusing duplicates. */}
+            {!isMetro && saipeData?.snapshot?.median_household_income != null && (
               <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-4 border-l-4 border-teal-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
-                  Median Income {isMetro ? `(${saipeRegionLabel} state)` : '(SAIPE)'}
+                  Median Income (SAIPE)
                 </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                   ${(saipeData.snapshot.median_household_income / 1000).toFixed(0)}K
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
-                  {isMetro ? 'State-level estimate' : 'State estimate'} · SAIPE {saipeData.snapshot.year}
+                  State estimate · SAIPE {saipeData.snapshot.year}
                 </p>
               </div>
             )}
@@ -418,11 +424,24 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       {/* Advanced Visualizations */}
       {visualizationType === 'lorenz' && (
         <div>
-          {/* SAIPE state-specific context banner */}
-          {saipeData?.snapshot && (
+          {/* Context banner: MSA data for metros, SAIPE for states */}
+          {isMetro && demographics.population != null ? (
             <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
               <span className="font-semibold text-indigo-800 dark:text-indigo-300">
-                {isMetro ? `${selectedRegion} metro (${saipeRegionLabel} state data)` : selectedRegion} · SAIPE {saipeData.snapshot.year}
+                {selectedRegion} Metro Statistical Area · ACS 2021
+              </span>
+              {demographics.poverty_rate != null && (
+                <span className="text-gray-700 dark:text-gray-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
+              )}
+              {demographics.median_household_income != null && (
+                <span className="text-gray-700 dark:text-gray-300">MSA Median Income: <strong>${demographics.median_household_income.toLocaleString()}</strong></span>
+              )}
+              <span className="text-xs text-indigo-500 dark:text-indigo-400 ml-auto">Source: Census Bureau ACS (MSA-level)</span>
+            </div>
+          ) : saipeData?.snapshot ? (
+            <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
+              <span className="font-semibold text-indigo-800 dark:text-indigo-300">
+                {selectedRegion} · SAIPE {saipeData.snapshot.year}
               </span>
               {saipeData.snapshot.poverty_rate != null && (
                 <span className="text-gray-700 dark:text-gray-300">Poverty Rate: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
@@ -435,7 +454,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               )}
               <span className="text-xs text-indigo-500 dark:text-indigo-400 ml-auto">Source: Census Bureau SAIPE</span>
             </div>
-          )}
+          ) : null}
           <LorenzCurve
             incomeData={generateLorenzData(regionData, wealthData, incomeDistData)}
             giniCoefficient={incomeDistData?.gini_coefficient ?? wealthData?.gini_coefficient}
@@ -456,10 +475,24 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
       {visualizationType === 'waffle' && (
         <div>
-          {saipeData?.snapshot && (
+          {/* Context banner: MSA data for metros, SAIPE for states */}
+          {isMetro && demographics.population != null ? (
             <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
               <span className="font-semibold text-purple-800 dark:text-purple-300">
-                {isMetro ? `${selectedRegion} metro (${saipeRegionLabel} state data)` : selectedRegion} · SAIPE {saipeData.snapshot.year}
+                {selectedRegion} Metro Statistical Area · ACS 2021
+              </span>
+              {demographics.poverty_rate != null && (
+                <span className="text-gray-700 dark:text-gray-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
+              )}
+              {demographics.poverty_rate != null && demographics.population != null && (
+                <span className="text-gray-700 dark:text-gray-300">In Poverty: <strong>{Math.round(demographics.population * demographics.poverty_rate / 100).toLocaleString()}</strong> people</span>
+              )}
+              <span className="text-xs text-purple-500 dark:text-purple-400 ml-auto">Source: Census Bureau ACS (MSA-level)</span>
+            </div>
+          ) : saipeData?.snapshot ? (
+            <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
+              <span className="font-semibold text-purple-800 dark:text-purple-300">
+                {selectedRegion} · SAIPE {saipeData.snapshot.year}
               </span>
               {saipeData.snapshot.poverty_rate != null && (
                 <span className="text-gray-700 dark:text-gray-300">All-age Poverty: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
@@ -469,7 +502,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               )}
               <span className="text-xs text-purple-500 dark:text-purple-400 ml-auto">Source: Census Bureau SAIPE</span>
             </div>
-          )}
+          ) : null}
           <WaffleChart
             data={generateWaffleData(regionData, wealthData, incomeDistData)}
             title={incomeDistData

@@ -1440,12 +1440,9 @@ async def get_wealth_distribution():
       - Gini coefficient: FRED API (SIPOVGINIUSA) or derived from DFA
     """
     try:
-        import os
-        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
-
         # ── 1. LORENZ CURVE (from networth-shares, latest quarter) ─────────
-        nw_path = os.path.join(data_dir, 'dfa-networth-shares.csv')
-        nw_df = pd.read_csv(nw_path)
+        # Loads from S3 (government-data/census/dfa-networth-shares.csv) with local fallback
+        nw_df = s3_loader.load_dfa_dataframe('dfa-networth-shares.csv')
         latest_quarter = nw_df['Date'].iloc[-1]  # last row's date
         # Use the actual latest date in the file
         latest_quarter = nw_df['Date'].max()
@@ -1508,8 +1505,8 @@ async def get_wealth_distribution():
             pass  # fall back to derived gini
 
         # ── 2. STACKED AREA (from income-shares, annual averages) ─────────
-        inc_path = os.path.join(data_dir, 'dfa-income-shares.csv')
-        inc_df = pd.read_csv(inc_path)
+        # Loads from S3 (government-data/census/dfa-income-shares.csv) with local fallback
+        inc_df = s3_loader.load_dfa_dataframe('dfa-income-shares.csv')
         # Parse year from "1989:Q3" format
         inc_df['year'] = inc_df['Date'].str[:4].astype(int)
         # Keep relevant income-share categories

@@ -46,11 +46,10 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
       if (response.ok) {
         const data = await response.json();
         
-        // If it's a list, try to calculate averages or use first entry
-        if (Array.isArray(data)) {
-          const sampleState = data.find((s: any) => s.state === 'California') || data[0];
-          setUsaData(sampleState);
-        } else {
+        // If it's a list of states, do NOT use any single state as the USA baseline —
+        // that would show a state's numbers (e.g. California) as national averages.
+        // Just keep the hardcoded USA fallback initialized in useState above.
+        if (!Array.isArray(data)) {
           setUsaData(data);
         }
       } else {
