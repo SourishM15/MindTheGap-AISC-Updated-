@@ -48,7 +48,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
   useEffect(() => {
     if (mapRef.current) return; // Already initialized
 
-    console.log('Initializing Leaflet map on map-container');
     const mapContainer = document.getElementById('map-container');
     if (!mapContainer) {
       console.error('Map container not found with ID: map-container');
@@ -95,18 +94,15 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
     }).addTo(map);
 
     mapRef.current = map;
-    console.log('Leaflet map initialized successfully with USA bounds and black background');
   }, []);
 
   // Load and render GeoJSON
   useEffect(() => {
     if (!mapRef.current) {
-      console.log('Waiting for map to initialize...');
       return;
     }
 
     const map = mapRef.current;
-    console.log('Loading GeoJSON data, selectedState:', selectedState);
 
     // Disable dragging and zooming when a state is selected
     if (selectedState !== 'United States') {
@@ -141,7 +137,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
         return res.json();
       })
       .then(data => {
-        console.log('TopoJSON data loaded, converting to GeoJSON');
         // Convert TopoJSON to GeoJSON
         const allStates = feature(data, data.objects.states);
         const statesArray = (allStates as any).features;
@@ -170,7 +165,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
           onEachFeature: (feature: any, layer: L.Layer) => {
             layer.on('click', () => {
               if (view === 'US') {
-                console.log('State clicked:', feature.properties.name);
                 onStateClick(feature);
               }
             });
@@ -188,7 +182,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
         }).addTo(map);
 
         geoJsonRef.current = geoJson;
-        console.log('GeoJSON layer added to map');
 
         // Get Alaska and Hawaii features for inset boxes
         const alaska = statesArray.find((f: any) => f.id === 2);
@@ -261,7 +254,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
             (f: any) => f.properties.name === selectedState
           );
           if (selectedFeature) {
-            console.log('Zooming to state:', selectedState);
             const bounds = (L.geoJSON(selectedFeature) as any).getBounds();
             map.fitBounds(bounds, { padding: [50, 50], animate: true });
           } else {
@@ -269,7 +261,6 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
           }
         } else {
           // Zoom out to USA view with smooth animation
-          console.log('Zooming out to USA view');
           const usaBounds = L.latLngBounds(
             L.latLng(24, -125),
             L.latLng(50, -66)

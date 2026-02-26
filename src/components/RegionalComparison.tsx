@@ -45,7 +45,6 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
       
       if (response.ok) {
         const data = await response.json();
-        console.log('Fetched USA data from API:', data);
         
         // If it's a list, try to calculate averages or use first entry
         if (Array.isArray(data)) {
@@ -55,7 +54,6 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
           setUsaData(data);
         }
       } else {
-        console.log('USA baseline data endpoint not available, using Census defaults');
         // Keep using the initialized fallback from state
       }
     } catch (err) {

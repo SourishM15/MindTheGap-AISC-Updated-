@@ -315,18 +315,18 @@ def add_node_to_graph(graph: nx.Graph, node_data: Dict[str, Any]):
     """Adds a new node to the graph from a dictionary of data."""
     location_name = node_data.get("Neighborhood Name")
     if not location_name:
-        print("Cannot add node to graph: 'Neighborhood Name' is missing from web data.")
+        logger.warning("Cannot add node to graph: 'Neighborhood Name' is missing from web data.")
         return
 
     # Create a stable node id for local data
     node_id = f"local_{location_name.replace(' ', '_')}"
     # If this node id already exists, merge; otherwise add with explicit data_type
     if node_id not in graph:
-        print(f"Adding new node '{node_id}' to the graph from web search.")
+        logger.info(f"Adding new node '{node_id}' to the graph from web search.")
         # Ensure the node has a data_type so that search_graph can match it
         node_entry = dict(node_data)
         node_entry.setdefault('data_type', 'local')
         graph.add_node(node_id, **node_entry)
     else:
-        print(f"Node '{node_id}' already exists. Merging data (web data takes precedence).")
+        logger.debug(f"Node '{node_id}' already exists. Merging data (web data takes precedence).")
         graph.nodes[node_id].update(node_data)

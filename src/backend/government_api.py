@@ -3,6 +3,7 @@ Government API Integration Module
 Fetches data from US Census Bureau, Bureau of Labor Statistics, and other government sources
 """
 
+import logging
 import os
 import requests
 import json
@@ -13,6 +14,8 @@ import asyncio
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # API Keys from environment
 CENSUS_API_KEY = os.getenv("CENSUS_API_KEY")
@@ -47,7 +50,7 @@ class CensusAPI:
             Dictionary with demographic data
         """
         if not CENSUS_API_KEY:
-            print("WARNING: CENSUS_API_KEY not set. Census data unavailable.")
+            logger.warning("CENSUS_API_KEY not set – Census data unavailable.")
             return {}
         
         # Default variables if not specified
@@ -88,7 +91,7 @@ class CensusAPI:
             return data
         
         except Exception as e:
-            print(f"Error fetching Census data: {e}")
+            logger.error(f"Error fetching Census data: {e}")
             return {}
     
     @staticmethod
@@ -143,7 +146,7 @@ class BLSApi:
     def get_unemployment_data(series_ids: List[str], start_year: int = 2020, end_year: int = 2024) -> Dict[str, Any]:
         """Fetch unemployment data from BLS"""
         if not BLS_API_KEY:
-            print("WARNING: BLS_API_KEY not set. BLS data unavailable.")
+            logger.warning("BLS_API_KEY not set – BLS data unavailable.")
             return {}
         
         cache_key = f"bls_{','.join(series_ids)}_{start_year}_{end_year}"
@@ -171,7 +174,7 @@ class BLSApi:
             return result
         
         except Exception as e:
-            print(f"Error fetching BLS data: {e}")
+            logger.error(f"Error fetching BLS data: {e}")
             return {}
     
     @staticmethod
@@ -198,7 +201,7 @@ class FederalReserveAPI:
     def get_series_data(series_id: str, start_date: str = None, end_date: str = None) -> Dict[str, Any]:
         """Fetch time series data from FRED"""
         if not FederalReserveAPI.FRED_API_KEY:
-            print("WARNING: FRED_API_KEY not set. FRED data unavailable.")
+            logger.warning("FRED_API_KEY not set – FRED data unavailable.")
             return {}
         
         cache_key = f"fred_{series_id}_{start_date}_{end_date}"
@@ -230,7 +233,7 @@ class FederalReserveAPI:
             return result
         
         except Exception as e:
-            print(f"Error fetching FRED data: {e}")
+            logger.error(f"Error fetching FRED data: {e}")
             return {}
 
 
@@ -272,4 +275,4 @@ def clear_api_cache():
     global _api_cache, _cache_expiry
     _api_cache = {}
     _cache_expiry = {}
-    print("✓ API cache cleared")
+    logger.info("API cache cleared")
