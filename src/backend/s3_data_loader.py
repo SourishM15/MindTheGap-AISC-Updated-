@@ -89,6 +89,42 @@ class S3DataLoader:
             logger.error(f"Error loading BLS data from S3: {e}")
             return pd.DataFrame()
     
+    def load_dfa_dataframe(self, filename: str) -> pd.DataFrame:
+        """
+        Load a Federal Reserve DFA CSV from S3 (government-data/census/<filename>).
+        Falls back to the local src/data/ directory if S3 is unavailable.
+        Results are cached for cache_ttl seconds.
+        """
+        cache_key = f"dfa_{filename}"
+        if self._is_cached(cache_key):
+            return self.cache[cache_key]
+
+        s3_key = f"government-data/census/{filename}"
+        df = pd.DataFrame()
+
+        # 1. Try S3 first
+        try:
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=s3_key)
+            df = pd.read_csv(StringIO(response['Body'].read().decode('utf-8')))
+            logger.info(f"✓ Loaded {filename} from S3 ({len(df)} rows)")
+        except Exception as s3_err:
+            logger.warning(f"S3 fetch failed for {filename}: {s3_err} — falling back to local file")
+
+        # 2. Fall back to local file
+        if df.empty:
+            local_path = os.path.join(os.path.dirname(__file__), '..', 'data', filename)
+            try:
+                df = pd.read_csv(local_path)
+                logger.info(f"✓ Loaded {filename} from local fallback ({len(df)} rows)")
+            except Exception as local_err:
+                logger.error(f"Local fallback also failed for {filename}: {local_err}")
+
+        if not df.empty:
+            self.cache[cache_key] = df
+            self.cache_timestamp[cache_key] = datetime.now()
+
+        return df
+
     def load_fred_data(self):
         """Load FRED economic indicators from S3"""
         cache_key = "fred_data"
