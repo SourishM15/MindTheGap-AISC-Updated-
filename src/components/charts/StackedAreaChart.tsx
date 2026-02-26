@@ -10,17 +10,14 @@ interface StackedAreaChartProps {
   deciles?: string[];
 }
 
+// Labels match the 6 brackets produced by the backend /api/wealth-distribution
 const DECILE_COLORS = {
-  'Bottom 10%': '#ef4444',
-  '10-20%': '#f97316',
-  '20-30%': '#eab308',
-  '30-40%': '#84cc16',
-  '40-50%': '#22c55e',
-  '50-60%': '#10b981',
-  '60-70%': '#14b8a6',
-  '70-80%': '#06b6d4',
-  '80-90%': '#0ea5e9',
-  'Top 10%': '#3b82f6'
+  'Bottom 20%': '#ef4444',
+  '20-40%':     '#f97316',
+  '40-60%':     '#eab308',
+  '60-80%':     '#22c55e',
+  '80-99%':     '#0ea5e9',
+  'Top 1%':     '#3b82f6',
 };
 
 /**
@@ -61,7 +58,7 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
         <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">{title}</h3>
         
         {/* Decile Legend with Toggle */}
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-2 mb-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
           {deciles.map((decile) => {
             const change = calculateChange(decile);
             const isHidden = hiddenDeciles.has(decile);
