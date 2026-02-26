@@ -506,7 +506,7 @@ function generateStackedAreaData(_regionData: RegionData | null, wealthData: Wea
   // Use real Federal Reserve DFA time series if available
   if (wealthData?.stacked_data?.length) return wealthData.stacked_data as { year: number; [decile: string]: string | number }[];
 
-  // Fallback mock data
+  // Fallback mock data — keys must match DECILE_COLORS in StackedAreaChart
   const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
   return years.map(year => ({
     year,
