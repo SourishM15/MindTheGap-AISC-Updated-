@@ -114,17 +114,19 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('overview');
 
   useEffect(() => {
+    let cancelled = false;
+
     const fetchRegionData = async () => {
       setLoading(true);
       setError(null);
+      setRegionData(null);
+      setSaipeData(null);
       setIncomeDistData(null);
       try {
         const stateForRegion = isMetro ? (METRO_TO_STATE[selectedRegion] ?? selectedRegion) : selectedRegion;
         const enrichedEndpoint = isMetro
           ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(selectedRegion)}`
           : `http://localhost:8000/api/enriched-state/${selectedRegion}`;
-
-        console.log('[VisualizationPanel] selectedRegion:', selectedRegion, '| isMetro:', isMetro, '| endpoint:', enrichedEndpoint);
 
         const [regionRes, wealthRes, saipeRes, incomeRes] = await Promise.all([
           fetch(enrichedEndpoint),
@@ -133,9 +135,11 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           fetch(`http://localhost:8000/api/income-lorenz/${stateForRegion}`),
         ]);
 
+        if (cancelled) return;
+
         if (regionRes.ok) {
           const data = await regionRes.json();
-          console.log('[VisualizationPanel] region response:', JSON.stringify({ success: data.success, metro: data.metro, state: data.state, demographicsKeys: Object.keys(data.profile?.demographics || {}) }));
+          if (cancelled) return;
           // Normalise metro response shape to match state shape (state field)
           if (data.success && data.profile) {
             if (isMetro && data.metro) data.state = data.metro;
@@ -145,28 +149,34 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
         if (wealthRes.ok) {
           const wData = await wealthRes.json();
+          if (cancelled) return;
           if (wData.success) setWealthData(wData);
         }
 
         if (saipeRes.ok) {
           const sData = await saipeRes.json();
+          if (cancelled) return;
           if (sData.success) setSaipeData(sData);
         }
 
         if (incomeRes.ok) {
           const iData = await incomeRes.json();
+          if (cancelled) return;
           if (iData.success && iData.state_specific && iData.data) {
             setIncomeDistData({ ...iData.data, state_specific: true });
           }
         }
       } catch (err) {
+        if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Error fetching data');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchRegionData();
+
+    return () => { cancelled = true; };
   }, [selectedRegion]);
 
   if (loading) {

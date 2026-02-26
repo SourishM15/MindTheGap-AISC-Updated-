@@ -1,9 +1,12 @@
 import os
+import re
 import logging
 import json
+import secrets
 import boto3
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Header, Depends
+from typing import Optional
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -50,6 +53,30 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ---------------------------------------------------------------------------
+# Security helpers
+# ---------------------------------------------------------------------------
+_SAFE_SLUG_RE = re.compile(r'[^a-zA-Z0-9 \-]')
+
+def _safe_slug(name: str) -> str:
+    """Strip any characters that could enable path traversal before embedding
+    a user-supplied value in an S3 key.  Only letters, digits, spaces, and
+    hyphens are allowed; everything else (dots, slashes, backslashes, etc.)
+    is removed."""
+    return _SAFE_SLUG_RE.sub('', name).strip().lower().replace(' ', '-')
+
+# Admin endpoints require an X-Admin-Key header matching the ADMIN_API_KEY env var.
+# If ADMIN_API_KEY is not set, admin endpoints are disabled entirely.
+_ADMIN_API_KEY = os.getenv("ADMIN_API_KEY", "")
+
+def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
+    """FastAPI dependency that enforces admin authentication."""
+    if not _ADMIN_API_KEY:
+        raise HTTPException(status_code=503, detail="Admin endpoints are disabled (ADMIN_API_KEY not configured)")
+    if not x_admin_key or not secrets.compare_digest(x_admin_key, _ADMIN_API_KEY):
+        raise HTTPException(status_code=403, detail="Invalid or missing admin key")
+
+# ---------------------------------------------------------------------------
 # --- Enrichment Data Loading (Government Data from S3) ---
 @lru_cache(maxsize=1)
 def load_enrichment_knowledge_base():
@@ -89,7 +116,7 @@ def load_enriched_state_profile(state_name: str) -> dict:
     """Load enriched profile for a specific state from S3"""
     try:
         s3_client = boto3.client('s3', region_name='us-east-2')
-        state_slug = state_name.lower().replace(' ', '-')
+        state_slug = _safe_slug(state_name)
         
         response = s3_client.get_object(
             Bucket='mindthegap-gov-data',
@@ -106,7 +133,7 @@ def load_enriched_metro_profile(metro_name: str) -> dict:
     """Load enriched profile for a specific metro area from S3"""
     try:
         s3_client = boto3.client('s3', region_name='us-east-2')
-        metro_slug = metro_name.lower().replace(' ', '-')
+        metro_slug = _safe_slug(metro_name)
         
         response = s3_client.get_object(
             Bucket='mindthegap-gov-data',
@@ -755,7 +782,7 @@ Answer:"""
         
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # --- Trend Analysis Endpoint ---
@@ -791,7 +818,7 @@ async def analyze_trends(request: TrendRequest):
         
     except Exception as e:
         logger.error(f"Trend analysis error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # --- Policy Recommendations Endpoint ---
@@ -823,7 +850,7 @@ async def get_policy(request: PolicyRequest):
         
     except Exception as e:
         logger.error(f"Policy recommendation error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # --- Supabase Direct Query Endpoints ---
 @app.get("/api/wealth-data")
@@ -843,7 +870,7 @@ async def get_wealth_data(category: str = None, limit: int = 100):
         }
     except Exception as e:
         logger.error(f"Error fetching wealth data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/demographics")
@@ -864,7 +891,7 @@ async def get_demographics(demographic_type: str = "race", group: str = None, li
         }
     except Exception as e:
         logger.error(f"Error fetching demographic data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/economic-indicators/{state}")
@@ -885,11 +912,11 @@ async def get_state_indicators(state: str):
         }
     except Exception as e:
         logger.error(f"Error fetching economic indicators: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/api/admin/sync-government-data")
-async def sync_government_data_endpoint():
+async def sync_government_data_endpoint(_: None = Depends(_require_admin)):
     """Trigger government data sync (admin endpoint)"""
     try:
         from sync_government_data import sync_all
@@ -903,19 +930,19 @@ async def sync_government_data_endpoint():
         }
     except Exception as e:
         logger.error(f"Sync error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # --- Cache Management Endpoint ---
 @app.post("/api/admin/clear-cache")
-async def clear_cache():
+async def clear_cache(_: None = Depends(_require_admin)):
     """Clear API caches (admin endpoint)"""
     try:
         clear_api_cache()
         return {"message": "API cache cleared successfully"}
     except Exception as e:
         logger.error(f"Cache clear error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 # --- Data Statistics Endpoint ---
@@ -981,17 +1008,22 @@ async def get_s3_government_data(data_type: str, query: str = None):
     
     except Exception as e:
         logger.error(f"Error fetching S3 government data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/s3/search")
 async def search_s3_data(query: str, data_type: str = "all"):
     """Search government data across S3 datasets"""
+    _VALID_SEARCH_TYPES = {"all", "census", "bls", "fred"}
+    if data_type not in _VALID_SEARCH_TYPES:
+        raise HTTPException(status_code=400, detail=f"Invalid data_type. Use: {', '.join(sorted(_VALID_SEARCH_TYPES))}")
+    # Limit query length to prevent abuse
+    query = query[:200]
     try:
         results = s3_loader.search_government_data(query, data_type)
         
         return {
-            "query": query,
+            "query": query,  # already capped at 200 chars
             "data_types_searched": list(results.keys()),
             "total_results": sum(len(v) for v in results.values()),
             "results": {
@@ -1002,7 +1034,7 @@ async def search_s3_data(query: str, data_type: str = "all"):
     
     except Exception as e:
         logger.error(f"Error searching S3 data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/s3/stats")
@@ -1014,7 +1046,7 @@ async def get_s3_stats():
     
     except Exception as e:
         logger.error(f"Error getting S3 stats: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 # --- Enriched Regional Data Endpoints ---
 @app.get("/api/saipe-state/{state_name}")
@@ -1042,7 +1074,7 @@ async def get_saipe_state(state_name: str, start_year: int = 2000):
         raise
     except Exception as e:
         logger.error(f"SAIPE error for {state_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/income-lorenz/{state_name}")
@@ -1079,7 +1111,7 @@ async def get_income_lorenz(state_name: str):
         }
     except Exception as e:
         logger.error(f"Income Lorenz error for {state_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/enriched-state/{state_name}")
@@ -1137,7 +1169,7 @@ async def get_enriched_state(state_name: str):
         }
     except Exception as e:
         logger.error(f"Error fetching enriched state data: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/enriched-states")
 async def list_enriched_states():
@@ -1165,12 +1197,12 @@ async def list_enriched_states():
         logger.error(f"Error listing enriched states: {e}")
         return {
             "success": False,
-            "error": str(e),
+            "error": "Could not list states",
             "states": []
         }
 
 @app.post("/api/admin/enrich-metro-areas")
-async def enrich_metro_areas():
+async def enrich_metro_areas(_: None = Depends(_require_admin)):
     """Enrich all metro areas and upload to S3 (admin endpoint)"""
     try:
         logger.info("Starting metro area enrichment...")
@@ -1216,7 +1248,7 @@ async def enrich_metro_areas():
     
     except Exception as e:
         logger.error(f"Metro area enrichment error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/enriched-metro-areas")
 async def list_enriched_metro_areas():
@@ -1244,13 +1276,16 @@ async def list_enriched_metro_areas():
         logger.error(f"Error listing enriched metro areas: {e}")
         return {
             "success": False,
-            "error": str(e),
+            "error": "Could not list metro areas",
             "metros": []
         }
 
 @app.get("/api/enriched-metro/{metro_name}")
 async def get_enriched_metro(metro_name: str):
     """Get enriched government data for a specific metro area."""
+    # Allowlist check — only accept known metro names
+    if metro_name not in city_client.metro_areas:
+        raise HTTPException(status_code=404, detail=f"Metro area not found: {metro_name}")
     try:
         # Try S3 profile first
         profile = load_enriched_metro_profile(metro_name)
@@ -1261,7 +1296,7 @@ async def get_enriched_metro(metro_name: str):
             unemployment = city_client.get_metro_unemployment(metro_name)
 
             if not demographics and not unemployment:
-                return {"success": False, "error": f"No data found for metro area: {metro_name}"}
+                return {"success": False, "error": "No data found for requested metro area"}
 
             profile = {
                 "identity": {
@@ -1338,7 +1373,7 @@ async def get_enriched_metro(metro_name: str):
         }
     except Exception as e:
         logger.error(f"Error fetching enriched metro data for {metro_name}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/compare-states")
@@ -1392,7 +1427,7 @@ async def compare_states(state1: str, state2: str):
         }
     except Exception as e:
         logger.error(f"Error comparing states: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/api/wealth-distribution")
 async def get_wealth_distribution():
@@ -1543,7 +1578,7 @@ async def get_wealth_distribution():
 
     except Exception as e:
         logger.error(f"Error in wealth distribution endpoint: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/api/chatbot-knowledge-base")
