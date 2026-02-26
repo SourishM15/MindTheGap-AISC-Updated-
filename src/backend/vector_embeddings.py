@@ -3,6 +3,7 @@ Vector Embedding Module for Semantic Search
 Converts wealth and demographic data into embeddings for semantic similarity search
 """
 
+import logging
 import os
 import json
 import numpy as np
@@ -11,12 +12,14 @@ from sentence_transformers import SentenceTransformer
 import faiss
 from datetime import datetime
 
+logger = logging.getLogger(__name__)
+
 # Initialize the embedding model
 try:
     model = SentenceTransformer('all-MiniLM-L6-v2')
-    print("✓ Embedding model loaded successfully")
+    logger.info("Embedding model loaded successfully")
 except Exception as e:
-    print(f"Error loading embedding model: {e}")
+    logger.error(f"Error loading embedding model: {e}")
     model = None
 
 
@@ -29,7 +32,7 @@ class VectorStore:
         self.metadata = []
         self.embeddings_cache = self._load_cache()
         if model is None:
-            print("WARNING: Embedding model not available. Semantic search will be disabled.")
+            logger.warning("Embedding model not available. Semantic search will be disabled.")
     
     def _load_cache(self) -> Dict:
         """Load cached embeddings to avoid recomputation"""
@@ -38,7 +41,7 @@ class VectorStore:
                 with open(self.embedding_cache_path, 'r') as f:
                     return json.load(f)
             except Exception as e:
-                print(f"Error loading cache: {e}")
+                logger.error(f"Error loading cache: {e}")
         return {}
     
     def _save_cache(self):
@@ -47,7 +50,7 @@ class VectorStore:
             with open(self.embedding_cache_path, 'w') as f:
                 json.dump(self.embeddings_cache, f)
         except Exception as e:
-            print(f"Error saving cache: {e}")
+            logger.error(f"Error saving cache: {e}")
     
     def embed_text(self, text: str) -> np.ndarray:
         """Generate embeddings for text with caching"""
@@ -67,7 +70,7 @@ class VectorStore:
     def add_documents(self, documents: List[Dict[str, Any]]):
         """Add documents to the vector store"""
         if model is None:
-            print("Cannot add documents: embedding model not available")
+            logger.warning("Cannot add documents: embedding model not available")
             return
         
         embeddings_list = []
@@ -88,7 +91,7 @@ class VectorStore:
             self.embeddings_index.add(embeddings_array)
             
             self._save_cache()
-            print(f"✓ Added {len(documents)} documents to vector store")
+            logger.info(f"Added {len(documents)} documents to vector store")
     
     def _document_to_text(self, doc: Dict[str, Any]) -> str:
         """Convert document to searchable text"""
@@ -115,7 +118,7 @@ class VectorStore:
     def search(self, query: str, top_k: int = 5) -> List[Tuple[Dict, float]]:
         """Search for similar documents using semantic similarity"""
         if model is None or self.embeddings_index is None:
-            print("Cannot search: embedding model or index not available")
+            logger.warning("Cannot search: embedding model or index not available")
             return []
         
         query_embedding = self.embed_text(query)

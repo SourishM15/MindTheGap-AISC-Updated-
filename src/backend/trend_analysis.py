@@ -3,12 +3,15 @@ Trend Analysis Engine for Wealth Disparity
 Analyzes trends, identifies patterns, and provides insights
 """
 
+import logging
 import numpy as np
 import pandas as pd
 from typing import List, Dict, Tuple, Any, Optional
 from datetime import datetime
 from scipy import stats
 import json
+
+logger = logging.getLogger(__name__)
 
 class TrendAnalyzer:
     """Analyzes wealth and economic trends"""
@@ -288,7 +291,7 @@ class TrendAnalyzer:
             
             return forecast
         except Exception as e:
-            print(f"Error in forecast: {e}")
+            logger.error(f"Error in forecast: {e}")
             return []
 
 
