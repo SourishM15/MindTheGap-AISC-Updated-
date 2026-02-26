@@ -146,6 +146,127 @@ class CensusAPIClient:
             'year': 2022
         }
     
+    def get_state_income_distribution(self, state_fips: str) -> Dict:
+        """
+        Fetch state-level income distribution for Lorenz curve and Gini coefficient.
+
+        Uses:
+          B19083_001E — Gini coefficient of income inequality (ACS direct estimate)
+          B19001_001E — Total households (denominator)
+          B19001_002E–017E — Household count by income bracket
+
+        Returns lorenz_data (list of cumulative population/income points),
+        waffle_data (aggregated income share groups), gini_coefficient, and
+        median_household_income.
+        """
+        # ACS income bracket variables with their midpoints (in $)
+        BRACKETS = [
+            ("B19001_002E", "< $10k",        5_000),
+            ("B19001_003E", "$10–15k",       12_500),
+            ("B19001_004E", "$15–20k",       17_500),
+            ("B19001_005E", "$20–25k",       22_500),
+            ("B19001_006E", "$25–30k",       27_500),
+            ("B19001_007E", "$30–35k",       32_500),
+            ("B19001_008E", "$35–40k",       37_500),
+            ("B19001_009E", "$40–45k",       42_500),
+            ("B19001_010E", "$45–50k",       47_500),
+            ("B19001_011E", "$50–60k",       55_000),
+            ("B19001_012E", "$60–75k",       67_500),
+            ("B19001_013E", "$75–100k",      87_500),
+            ("B19001_014E", "$100–125k",    112_500),
+            ("B19001_015E", "$125–150k",    137_500),
+            ("B19001_016E", "$150–200k",    175_000),
+            ("B19001_017E", "$200k+",       350_000),
+        ]
+        vars_needed = ["B19083_001E", "B19001_001E", "B19013_001E"] + [b[0] for b in BRACKETS]
+
+        try:
+            if not self.api_key:
+                return {}
+
+            url = self.get_url(",".join(vars_needed), f"state:{state_fips}")
+            resp = requests.get(url, timeout=10)
+            resp.raise_for_status()
+            rows = resp.json()
+            if len(rows) < 2:
+                return {}
+
+            header, row = rows[0], rows[1]
+            record = dict(zip(header, row))
+
+            def safe_int(val):
+                try:
+                    v = int(val)
+                    return v if v >= 0 else 0
+                except (TypeError, ValueError):
+                    return 0
+
+            def safe_float(val):
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return None
+
+            gini = safe_float(record.get("B19083_001E"))
+            total_hh = safe_int(record.get("B19001_001E")) or 1
+            median_income = safe_float(record.get("B19013_001E"))
+
+            counts = [safe_int(record.get(b[0])) for b in BRACKETS]
+            midpoints = [b[2] for b in BRACKETS]
+            labels = [b[1] for b in BRACKETS]
+
+            # Build Lorenz curve: cumulative population vs cumulative income
+            total_income = sum(c * m for c, m in zip(counts, midpoints)) or 1
+            cum_pop = 0.0
+            cum_inc = 0.0
+            lorenz_data = [{"bracket": "Origin", "cumulativePopulation": 0.0,
+                            "cumulativeWealth": 0.0, "percentage": 0.0}]
+            for label, count, midpoint in zip(labels, counts, midpoints):
+                cum_pop += (count / total_hh) * 100
+                cum_inc += (count * midpoint / total_income) * 100
+                lorenz_data.append({
+                    "bracket": label,
+                    "cumulativePopulation": round(cum_pop, 2),
+                    "cumulativeWealth": round(cum_inc, 2),
+                    "percentage": round((count * midpoint / total_income) * 100, 2),
+                })
+
+            # Aggregate into 6 quintile-ish waffle groups
+            # Group brackets by cumulative population into ~20% buckets
+            WAFFLE_COLORS = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#0ea5e9", "#3b82f6"]
+            WAFFLE_NAMES = ["Bottom 20%", "20–40%", "40–60%", "60–80%", "80–95%", "Top 5%"]
+            WAFFLE_THRESHOLDS = [20, 40, 60, 80, 95, 100]
+
+            group_incomes = [0.0] * 6
+            cum_pop2 = 0.0
+            for count, midpoint in zip(counts, midpoints):
+                pop_share = (count / total_hh) * 100
+                inc_share = (count * midpoint / total_income) * 100
+                cum_pop2 += pop_share
+                for gi, threshold in enumerate(WAFFLE_THRESHOLDS):
+                    if cum_pop2 <= threshold or gi == 5:
+                        group_incomes[gi] += inc_share
+                        break
+
+            waffle_data = [
+                {"bracket": name, "percentage": round(group_incomes[i], 1), "color": WAFFLE_COLORS[i]}
+                for i, name in enumerate(WAFFLE_NAMES)
+                if group_incomes[i] > 0
+            ]
+
+            return {
+                "gini_coefficient": gini,
+                "median_household_income": median_income,
+                "lorenz_data": lorenz_data,
+                "waffle_data": waffle_data,
+                "source": "Census ACS B19001/B19083",
+                "year": int(self.YEAR),
+            }
+
+        except Exception as e:
+            logger.error(f"Error fetching income distribution for FIPS {state_fips}: {e}")
+            return {}
+
     def get_county_demographics(self, state_fips: str, county_fips: str) -> Dict:
         """Fetch demographic data for a specific county"""
         try:
