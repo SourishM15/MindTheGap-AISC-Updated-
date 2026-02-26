@@ -75,10 +75,14 @@ class CityAPIClient:
             
             # ACS variables
             variables = {
-                'B01003_001E': 'total_population',  # Total population
+                'B01003_001E': 'total_population',         # Total population
                 'B19013_001E': 'median_household_income',  # Median household income
-                'B17001_002E': 'poverty_count',  # Population below poverty line
-                'B15003_022E': 'bachelor_degree',  # Bachelor's degree
+                'B17001_002E': 'poverty_count',            # Population below poverty line
+                'B15003_001E': 'pop_25_plus',              # Population 25+ (education denominator)
+                'B15003_022E': 'bachelor_degree',          # Bachelor's degree
+                'B15003_023E': 'masters_degree',           # Master's degree
+                'B15003_024E': 'professional_degree',      # Professional degree
+                'B15003_025E': 'doctorate_degree',         # Doctorate
             }
             
             var_list = ','.join(variables.keys())
@@ -115,9 +119,14 @@ class CityAPIClient:
             # Calculate derived metrics
             if result.get('poverty_count') and result.get('total_population'):
                 result['poverty_rate'] = (result['poverty_count'] / result['total_population']) * 100
-            
-            if result.get('bachelor_degree') and result.get('total_population'):
-                result['education_bachelor_and_above'] = (result['bachelor_degree'] / result['total_population']) * 100
+
+            # Education: bachelor's or higher among adults 25+
+            pop_25_plus = result.get('pop_25_plus') or 0
+            bachelors_plus = sum(result.get(k, 0) or 0 for k in (
+                'bachelor_degree', 'masters_degree', 'professional_degree', 'doctorate_degree'
+            ))
+            if bachelors_plus and pop_25_plus:
+                result['education_bachelor_and_above'] = (bachelors_plus / pop_25_plus) * 100
             
             logger.info(f"✅ Retrieved demographics for {metro_name}")
             return result

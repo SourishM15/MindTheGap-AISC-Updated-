@@ -15,9 +15,11 @@ interface VisualizationPanelProps {
 
 interface RegionData {
   state: string;
+  metro?: string;
   profile: {
     demographics?: {
       population?: number;
+      metro_fips?: string;
       median_household_income?: number;
       poverty_rate?: number;
       education_bachelor_and_above?: number;
@@ -122,6 +124,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(selectedRegion)}`
           : `http://localhost:8000/api/enriched-state/${selectedRegion}`;
 
+        console.log('[VisualizationPanel] selectedRegion:', selectedRegion, '| isMetro:', isMetro, '| endpoint:', enrichedEndpoint);
+
         const [regionRes, wealthRes, saipeRes, incomeRes] = await Promise.all([
           fetch(enrichedEndpoint),
           fetch('http://localhost:8000/api/wealth-distribution'),
@@ -131,6 +135,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
         if (regionRes.ok) {
           const data = await regionRes.json();
+          console.log('[VisualizationPanel] region response:', JSON.stringify({ success: data.success, metro: data.metro, state: data.state, demographicsKeys: Object.keys(data.profile?.demographics || {}) }));
           // Normalise metro response shape to match state shape (state field)
           if (data.success && data.profile) {
             if (isMetro && data.metro) data.state = data.metro;
@@ -212,7 +217,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
     return (
       <div className="grid grid-cols-1 gap-6 mb-6">
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-start mb-6">
+          <div className="flex justify-between items-start mb-4">
             <div>
               <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                 {selectedRegion} - Key Demographics
@@ -221,6 +226,17 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 Timeframe: {filters.timeframe === 'current' ? 'Current Data' : filters.timeframe === 'historical' ? 'Historical Trends' : 'Forecast'}
               </p>
             </div>
+          </div>
+
+          {/* Data source badge */}
+          <div className={`text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 mb-5 font-medium
+            ${isMetro
+              ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300'
+              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
+            <span className={`w-2 h-2 rounded-full ${isMetro ? 'bg-blue-500' : 'bg-gray-400'}`} />
+            {isMetro
+              ? `Census ACS 2021 · ${selectedRegion} Metro Statistical Area (MSA FIPS: ${demographics.metro_fips ?? '—'})`
+              : `Census ACS / SAIPE · ${selectedRegion}`}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {metricsToShow.showPopulation && demographics.population != null && (

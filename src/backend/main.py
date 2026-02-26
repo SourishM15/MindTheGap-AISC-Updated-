@@ -1291,8 +1291,11 @@ async def get_enriched_metro(metro_name: str):
         if demo:
             if "total_population" in demo and "population" not in demo:
                 demo["population"] = demo["total_population"]
-            if "education_bachelor_and_above" not in demo and "bachelor_degree" in demo and demo.get("total_population", 0):
-                demo["education_bachelor_and_above"] = (demo["bachelor_degree"] / demo["total_population"]) * 100
+            # education_bachelor_and_above is computed correctly by city_api_client (bachelor+/pop_25+)
+            # Only compute fallback if city_api_client didn't provide it AND we have the right denominator
+            if "education_bachelor_and_above" not in demo and "bachelor_degree" in demo and demo.get("pop_25_plus", 0):
+                bachelors_plus = sum(demo.get(k, 0) or 0 for k in ("bachelor_degree", "masters_degree", "professional_degree", "doctorate_degree"))
+                demo["education_bachelor_and_above"] = (bachelors_plus / demo["pop_25_plus"]) * 100
             profile["demographics"] = demo
 
         # Enrich with SAIPE for the metro's home state
