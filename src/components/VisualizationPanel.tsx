@@ -99,6 +99,10 @@ const METRO_TO_STATE: Record<string, string> = {
 };
 
 const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, selectedRegion = 'United States' }) => {
+  // A region is metro only if it's in MAJOR_METRO_AREAS but NOT also a US state name.
+  // "Washington" and "New York" appear in both — treat them as states to avoid wrong routing.
+  const isMetro = MAJOR_METRO_AREAS.includes(selectedRegion) && !(['Washington', 'New York'].includes(selectedRegion));
+
   const [regionData, setRegionData] = useState<RegionData | null>(null);
   const [wealthData, setWealthData] = useState<WealthDistributionData | null>(null);
   const [saipeData, setSaipeData] = useState<SAIPEData | null>(null);
@@ -113,7 +117,6 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       setError(null);
       setIncomeDistData(null);
       try {
-        const isMetro = MAJOR_METRO_AREAS.includes(selectedRegion);
         const stateForRegion = isMetro ? (METRO_TO_STATE[selectedRegion] ?? selectedRegion) : selectedRegion;
         const enrichedEndpoint = isMetro
           ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(selectedRegion)}`
@@ -192,11 +195,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
   const unemploymentData = economics.indicators?.unemployment_rate?.data || {};
   const latestUnemploymentRate = unemploymentData[Object.keys(unemploymentData).sort().pop() as string];
 
+  const saipeRegionLabel = isMetro
+    ? (saipeData?.snapshot?.state_name ?? METRO_TO_STATE[selectedRegion] ?? selectedRegion)
+    : selectedRegion;
+
   const renderCharts = () => {
-    // Determine which metrics to display based on filter selections
+    // Always show population + income when data exists; other metrics gated by filter checkboxes
     const metricsToShow = {
-      showPopulation: filters.metrics.includes('population'),
-      showIncome: filters.metrics.includes('median-income'),
+      showPopulation: true,
+      showIncome: true,
       showPoverty: true,
       showEducation: true,
       showUnemployment: true
@@ -261,23 +268,29 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Current rate</p>
               </div>
             )}
-            {/* SAIPE-sourced state-specific data */}
+            {/* SAIPE-sourced data — state-level for metros, state-level for states */}
             {saipeData?.snapshot?.child_poverty_rate != null && (
               <div className="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-4 border-l-4 border-orange-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Child Poverty Rate</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                   {saipeData.snapshot.child_poverty_rate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Under 18 · SAIPE {saipeData.snapshot.year}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  Under 18 · SAIPE {saipeData.snapshot.year}{isMetro ? ` · ${saipeRegionLabel} (state)` : ''}
+                </p>
               </div>
             )}
             {saipeData?.snapshot?.median_household_income != null && (
               <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-4 border-l-4 border-teal-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Median Income (SAIPE)</p>
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+                  Median Income {isMetro ? `(${saipeRegionLabel} state)` : '(SAIPE)'}
+                </p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                   ${(saipeData.snapshot.median_household_income / 1000).toFixed(0)}K
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">State estimate · SAIPE {saipeData.snapshot.year}</p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                  {isMetro ? 'State-level estimate' : 'State estimate'} · SAIPE {saipeData.snapshot.year}
+                </p>
               </div>
             )}
           </div>
@@ -382,7 +395,9 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           {/* SAIPE state-specific context banner */}
           {saipeData?.snapshot && (
             <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-indigo-800 dark:text-indigo-300">{selectedRegion} · SAIPE {saipeData.snapshot.year}</span>
+              <span className="font-semibold text-indigo-800 dark:text-indigo-300">
+                {isMetro ? `${selectedRegion} metro (${saipeRegionLabel} state data)` : selectedRegion} · SAIPE {saipeData.snapshot.year}
+              </span>
               {saipeData.snapshot.poverty_rate != null && (
                 <span className="text-gray-700 dark:text-gray-300">Poverty Rate: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
               )}
@@ -417,7 +432,9 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <div>
           {saipeData?.snapshot && (
             <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-purple-800 dark:text-purple-300">{selectedRegion} · SAIPE {saipeData.snapshot.year}</span>
+              <span className="font-semibold text-purple-800 dark:text-purple-300">
+                {isMetro ? `${selectedRegion} metro (${saipeRegionLabel} state data)` : selectedRegion} · SAIPE {saipeData.snapshot.year}
+              </span>
               {saipeData.snapshot.poverty_rate != null && (
                 <span className="text-gray-700 dark:text-gray-300">All-age Poverty: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
               )}
