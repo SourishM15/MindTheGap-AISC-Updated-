@@ -18,6 +18,10 @@ from policy_recommendations import get_policy_recommendations_for_region
 from government_api import get_local_economic_indicators, clear_api_cache
 from s3_data_loader import s3_loader
 from city_api_client import city_client
+from saipe_api_client import saipe_client, STATE_FIPS as SAIPE_STATE_FIPS
+from census_api_client import CensusAPIClient
+
+census_client = CensusAPIClient()
 
 # Configure logging
 logging.basicConfig(
@@ -1013,23 +1017,123 @@ async def get_s3_stats():
         raise HTTPException(status_code=500, detail=str(e))
 
 # --- Enriched Regional Data Endpoints ---
+@app.get("/api/saipe-state/{state_name}")
+async def get_saipe_state(state_name: str, start_year: int = 2000):
+    """
+    Return Census SAIPE income & poverty data for a specific state.
+    Includes a current snapshot (latest year) and a time series from start_year.
+    """
+    try:
+        slug = state_name.strip().lower().replace(" ", "-")
+        if slug not in SAIPE_STATE_FIPS:
+            raise HTTPException(status_code=404, detail=f"State not found: {state_name}")
+
+        snapshot = saipe_client.get_state_snapshot(state_name, year=2023)
+        time_series = saipe_client.get_state_time_series(state_name, start_year=start_year, end_year=2023)
+
+        return {
+            "success": True,
+            "state": state_name,
+            "snapshot": snapshot,
+            "time_series": time_series,
+            "source": "Census Bureau SAIPE",
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SAIPE error for {state_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/income-lorenz/{state_name}")
+async def get_income_lorenz(state_name: str):
+    """
+    Return state-specific income distribution (Lorenz curve + Gini + waffle data)
+    built from Census ACS B19001 income bracket counts and B19083 Gini coefficient.
+    Falls back to national DFA data for 'United States'.
+    """
+    try:
+        slug = state_name.strip().lower().replace(" ", "-")
+        fips = SAIPE_STATE_FIPS.get(slug)
+
+        if not fips or slug in ("united-states", "us"):
+            # Return national DFA data for US-level selection
+            return {
+                "success": True,
+                "state": state_name,
+                "source": "Federal Reserve DFA (national)",
+                "state_specific": False,
+                "data": None,
+            }
+
+        data = census_client.get_state_income_distribution(fips)
+        if not data:
+            return {"success": False, "error": f"No income distribution data for {state_name}"}
+
+        return {
+            "success": True,
+            "state": state_name,
+            "source": data.get("source", "Census ACS"),
+            "state_specific": True,
+            "data": data,
+        }
+    except Exception as e:
+        logger.error(f"Income Lorenz error for {state_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/enriched-state/{state_name}")
 async def get_enriched_state(state_name: str):
-    """Get enriched government data for a specific state"""
+    """Get enriched government data for a specific state, including SAIPE poverty/income."""
     try:
+        # Special case: United States — build national summary from SAIPE + DFA
+        if state_name.strip().lower() in ("united states", "united-states", "us"):
+            saipe_us = saipe_client.get_state_snapshot("united-states", year=2023)
+            return {
+                "success": True,
+                "state": "United States",
+                "profile": {
+                    "identity": {"state_name": "United States", "state_code": "US", "fips_code": "00"},
+                    "demographics": {
+                        "population": 331_000_000,
+                        "median_household_income": saipe_us.get("median_household_income", 74580),
+                        "poverty_rate": saipe_us.get("poverty_rate", 11.5),
+                        "source": "Census SAIPE",
+                        "year": 2023,
+                    },
+                    "saipe": saipe_us,
+                    "note": "National-level data. Select a state for regional detail.",
+                },
+                "data_sources": ["Census SAIPE", "Federal Reserve DFA"],
+            }
+
         profile = load_enriched_state_profile(state_name)
-        
+
         if not profile:
             return {
                 "success": False,
                 "error": f"No enriched data found for {state_name}"
             }
-        
+
+        # Enrich with SAIPE state-specific income & poverty data
+        try:
+            saipe_snapshot = saipe_client.get_state_snapshot(state_name, year=2023)
+            if saipe_snapshot:
+                profile["saipe"] = saipe_snapshot
+                # Override demographics with more accurate SAIPE figures
+                if profile.get("demographics"):
+                    if saipe_snapshot.get("poverty_rate") is not None:
+                        profile["demographics"]["poverty_rate"] = saipe_snapshot["poverty_rate"]
+                    if saipe_snapshot.get("median_household_income") is not None:
+                        profile["demographics"]["median_household_income"] = saipe_snapshot["median_household_income"]
+        except Exception as saipe_err:
+            logger.warning(f"Could not enrich with SAIPE data: {saipe_err}")
+
         return {
             "success": True,
             "state": state_name,
             "profile": profile,
-            "data_sources": ["Census Bureau", "Bureau of Labor Statistics", "Federal Reserve (FRED)"]
+            "data_sources": ["Census Bureau", "Bureau of Labor Statistics", "Federal Reserve (FRED)", "Census SAIPE"]
         }
     except Exception as e:
         logger.error(f"Error fetching enriched state data: {e}")
@@ -1144,6 +1248,96 @@ async def list_enriched_metro_areas():
             "metros": []
         }
 
+@app.get("/api/enriched-metro/{metro_name}")
+async def get_enriched_metro(metro_name: str):
+    """Get enriched government data for a specific metro area."""
+    try:
+        # Try S3 profile first
+        profile = load_enriched_metro_profile(metro_name)
+
+        # If no S3 profile, build one from live APIs
+        if not profile:
+            demographics = city_client.get_metro_area_demographics(metro_name)
+            unemployment = city_client.get_metro_unemployment(metro_name)
+
+            if not demographics and not unemployment:
+                return {"success": False, "error": f"No data found for metro area: {metro_name}"}
+
+            profile = {
+                "identity": {
+                    "metro_name": metro_name,
+                    "region_type": "metro",
+                },
+                "demographics": demographics or {},
+                "employment": unemployment or {},
+            }
+        else:
+            # Enrich S3 profile with latest live data
+            demographics = city_client.get_metro_area_demographics(metro_name)
+            unemployment = city_client.get_metro_unemployment(metro_name)
+            if demographics:
+                profile["demographics"] = {**(profile.get("demographics") or {}), **demographics}
+            if unemployment:
+                profile["employment"] = {**(profile.get("employment") or {}), **unemployment}
+
+        # Tag as metro region
+        if "identity" not in profile:
+            profile["identity"] = {}
+        profile["identity"]["region_type"] = "metro"
+        profile["identity"]["metro_name"] = metro_name
+
+        # Normalise demographics keys to match state profile shape
+        demo = profile.get("demographics", {})
+        if demo:
+            if "total_population" in demo and "population" not in demo:
+                demo["population"] = demo["total_population"]
+            if "education_bachelor_and_above" not in demo and "bachelor_degree" in demo and demo.get("total_population", 0):
+                demo["education_bachelor_and_above"] = (demo["bachelor_degree"] / demo["total_population"]) * 100
+            profile["demographics"] = demo
+
+        # Enrich with SAIPE for the metro's home state
+        metro_info = city_client.metro_areas.get(metro_name)
+        if metro_info:
+            state_code = metro_info.get("state", "")
+            # Convert 2-letter code to full name for SAIPE
+            state_code_to_name = {v: k for k, v in {
+                "alabama": "AL", "alaska": "AK", "arizona": "AZ", "arkansas": "AR",
+                "california": "CA", "colorado": "CO", "connecticut": "CT", "delaware": "DE",
+                "florida": "FL", "georgia": "GA", "hawaii": "HI", "idaho": "ID",
+                "illinois": "IL", "indiana": "IN", "iowa": "IA", "kansas": "KS",
+                "kentucky": "KY", "louisiana": "LA", "maine": "ME", "maryland": "MD",
+                "massachusetts": "MA", "michigan": "MI", "minnesota": "MN",
+                "mississippi": "MS", "missouri": "MO", "montana": "MT", "nebraska": "NE",
+                "nevada": "NV", "new-hampshire": "NH", "new-jersey": "NJ",
+                "new-mexico": "NM", "new-york": "NY", "north-carolina": "NC",
+                "north-dakota": "ND", "ohio": "OH", "oklahoma": "OK", "oregon": "OR",
+                "pennsylvania": "PA", "rhode-island": "RI", "south-carolina": "SC",
+                "south-dakota": "SD", "tennessee": "TN", "texas": "TX", "utah": "UT",
+                "vermont": "VT", "virginia": "VA", "washington": "WA",
+                "west-virginia": "WV", "wisconsin": "WI", "wyoming": "WY",
+                "district-of-columbia": "DC",
+            }.items()}
+            state_full_name = state_code_to_name.get(state_code, "")
+            if state_full_name:
+                try:
+                    saipe_snapshot = saipe_client.get_state_snapshot(state_full_name, year=2023)
+                    if saipe_snapshot:
+                        profile["saipe"] = saipe_snapshot
+                        profile["saipe"]["note"] = f"State-level SAIPE data for {state_full_name} (metro-level SAIPE not available)"
+                except Exception as saipe_err:
+                    logger.warning(f"Could not enrich metro with SAIPE data: {saipe_err}")
+
+        return {
+            "success": True,
+            "metro": metro_name,
+            "profile": profile,
+            "data_sources": ["Census Bureau ACS (MSA)", "BLS LAUS", "Census SAIPE (state-level)"],
+        }
+    except Exception as e:
+        logger.error(f"Error fetching enriched metro data for {metro_name}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/compare-states")
 async def compare_states(state1: str, state2: str):
     """Compare two states using enriched government data"""
@@ -1196,6 +1390,158 @@ async def compare_states(state1: str, state2: str):
     except Exception as e:
         logger.error(f"Error comparing states: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/wealth-distribution")
+async def get_wealth_distribution():
+    """
+    Return real Federal Reserve DFA wealth/income distribution data for visualizations.
+    Sources:
+      - Lorenz curve: dfa-networth-shares.csv (latest quarter)
+      - Stacked area: dfa-income-shares.csv (full time series, annual avg)
+      - Waffle chart: dfa-income-shares.csv (latest quarter)
+      - Gini coefficient: FRED API (SIPOVGINIUSA) or derived from DFA
+    """
+    try:
+        import os
+        data_dir = os.path.join(os.path.dirname(__file__), '..', 'data')
+
+        # ── 1. LORENZ CURVE (from networth-shares, latest quarter) ─────────
+        nw_path = os.path.join(data_dir, 'dfa-networth-shares.csv')
+        nw_df = pd.read_csv(nw_path)
+        latest_quarter = nw_df['Date'].iloc[-1]  # last row's date
+        # Use the actual latest date in the file
+        latest_quarter = nw_df['Date'].max()
+        latest_nw = nw_df[nw_df['Date'] == latest_quarter]
+
+        # Map DFA categories to population percentiles (low → high wealth)
+        dfa_to_pop = {
+            'Bottom50':       {'pop_start': 0,  'pop_end': 50},
+            'Next40':         {'pop_start': 50, 'pop_end': 90},
+            'Next9':          {'pop_start': 90, 'pop_end': 99},
+            'RemainingTop1':  {'pop_start': 99, 'pop_end': 99.9},
+            'TopPt1':         {'pop_start': 99.9, 'pop_end': 100},
+        }
+        nw_row = {row['Category']: row['Net worth'] for _, row in latest_nw.iterrows()
+                  if row['Category'] in dfa_to_pop}
+
+        # Sort from poorest to richest and build cumulative series
+        ordered = ['Bottom50', 'Next40', 'Next9', 'RemainingTop1', 'TopPt1']
+        lorenz_data = []
+        cum_pop = 0.0
+        cum_wealth = 0.0
+        lorenz_data.append({'bracket': 'Origin', 'cumulativePopulation': 0, 'cumulativeWealth': 0,
+                             'percentage': 0})
+        for cat in ordered:
+            if cat not in nw_row:
+                continue
+            info = dfa_to_pop[cat]
+            pop_share = info['pop_end'] - info['pop_start']
+            wealth_share = float(nw_row[cat])
+            cum_pop += pop_share
+            cum_wealth += wealth_share
+            lorenz_data.append({
+                'bracket': cat.replace('TopPt1', 'Top 0.1%')
+                               .replace('RemainingTop1', 'Top 1-0.1%')
+                               .replace('Next9', 'Next 9%')
+                               .replace('Next40', 'Next 40%')
+                               .replace('Bottom50', 'Bottom 50%'),
+                'cumulativePopulation': round(cum_pop, 1),
+                'cumulativeWealth': round(cum_wealth, 2),
+                'percentage': round(wealth_share, 2),
+            })
+
+        # Derive Gini from Lorenz data (trapezoidal approximation)
+        points = [(0, 0)] + [(d['cumulativePopulation'], d['cumulativeWealth']) for d in lorenz_data[1:]]
+        area_under_lorenz = sum(
+            (points[i][0] - points[i-1][0]) * (points[i][1] + points[i-1][1]) / 2
+            for i in range(1, len(points))
+        ) / 10000  # normalise from % to fraction
+        gini = round(1 - 2 * area_under_lorenz, 4)
+
+        # Try to get official FRED Gini (SIPOVGINIUSA) as well
+        try:
+            from fred_api_client import FREDAPIClient
+            fred = FREDAPIClient()
+            gini_series = fred._get_series_data('SIPOVGINIUSA', 5)
+            if gini_series and gini_series.get('data'):
+                latest_gini_key = sorted(gini_series['data'].keys())[-1]
+                gini = round(gini_series['data'][latest_gini_key] / 100, 4)  # FRED stores as 0-100
+        except Exception:
+            pass  # fall back to derived gini
+
+        # ── 2. STACKED AREA (from income-shares, annual averages) ─────────
+        inc_path = os.path.join(data_dir, 'dfa-income-shares.csv')
+        inc_df = pd.read_csv(inc_path)
+        # Parse year from "1989:Q3" format
+        inc_df['year'] = inc_df['Date'].str[:4].astype(int)
+        # Keep relevant income-share categories
+        inc_cats = ['pct99to100', 'pct80to99', 'pct60to80', 'pct40to60', 'pct20to40', 'pct00to20']
+        inc_filtered = inc_df[inc_df['Category'].isin(inc_cats)]
+        # Annual average per category
+        annual = inc_filtered.groupby(['year', 'Category'])['Net worth'].mean().reset_index()
+        # Pivot so each row is a year
+        pivoted = annual.pivot(index='year', columns='Category', values='Net worth').reset_index()
+        pivoted = pivoted.sort_values('year')
+        label_map = {
+            'pct99to100': 'Top 1%',
+            'pct80to99':  '80-99%',
+            'pct60to80':  '60-80%',
+            'pct40to60':  '40-60%',
+            'pct20to40':  '20-40%',
+            'pct00to20':  'Bottom 20%',
+        }
+        stacked_data = []
+        for _, row in pivoted.iterrows():
+            entry = {'year': int(row['year'])}
+            for cat, label in label_map.items():
+                if cat in pivoted.columns:
+                    val = row.get(cat)
+                    entry[label] = round(float(val), 2) if pd.notna(val) else 0
+            stacked_data.append(entry)
+
+        # ── 3. WAFFLE CHART (latest income share quarter) ─────────────────
+        latest_inc_quarter = inc_df['Date'].max()
+        latest_inc = inc_df[inc_df['Date'] == latest_inc_quarter]
+        waffle_colors = {
+            'pct99to100': '#3b82f6',
+            'pct80to99':  '#0ea5e9',
+            'pct60to80':  '#14b8a6',
+            'pct40to60':  '#22c55e',
+            'pct20to40':  '#eab308',
+            'pct00to20':  '#ef4444',
+        }
+        waffle_labels = {
+            'pct99to100': 'Top 1%',
+            'pct80to99':  '80-99%',
+            'pct60to80':  '60-80%',
+            'pct40to60':  '40-60%',
+            'pct20to40':  '20-40%',
+            'pct00to20':  'Bottom 20%',
+        }
+        waffle_data = []
+        for cat in ['pct00to20', 'pct20to40', 'pct40to60', 'pct60to80', 'pct80to99', 'pct99to100']:
+            row = latest_inc[latest_inc['Category'] == cat]
+            if not row.empty:
+                waffle_data.append({
+                    'bracket': waffle_labels[cat],
+                    'percentage': round(float(row['Net worth'].iloc[0]), 2),
+                    'color': waffle_colors[cat],
+                })
+
+        return {
+            'success': True,
+            'data_date': latest_quarter,
+            'gini_coefficient': gini,
+            'lorenz_data': lorenz_data,
+            'stacked_data': stacked_data,
+            'waffle_data': waffle_data,
+            'source': 'Federal Reserve Distributional Financial Accounts (DFA)',
+        }
+
+    except Exception as e:
+        logger.error(f"Error in wealth distribution endpoint: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @app.get("/api/chatbot-knowledge-base")
 async def get_chatbot_knowledge_base():

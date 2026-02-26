@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { FilterState } from '../types';
-import LineChart from './charts/LineChart';
-import BarChart from './charts/BarChart';
+import { MAJOR_METRO_AREAS } from '../data/states';
 import LorenzCurve from './charts/LorenzCurve';
 import StackedAreaChart from './charts/StackedAreaChart';
 import WaffleChart from './charts/WaffleChart';
@@ -30,10 +29,80 @@ interface RegionData {
   };
 }
 
+interface WealthDistributionData {
+  gini_coefficient: number;
+  data_date: string;
+  lorenz_data: { bracket: string; cumulativePopulation: number; cumulativeWealth: number; percentage: number }[];
+  stacked_data: Record<string, number>[];
+  waffle_data: { bracket: string; percentage: number; color: string }[];
+  source: string;
+}
+
+interface IncomeLorenzData {
+  gini_coefficient: number | null;
+  median_household_income: number | null;
+  lorenz_data: { bracket: string; percentage: number; cumulativePopulation: number; cumulativeWealth: number }[];
+  waffle_data: { bracket: string; percentage: number; color: string }[];
+  source: string;
+  year: number;
+  state_specific: boolean;
+}
+
+interface SAIPESnapshot {
+  state_name: string;
+  fips: string;
+  year: number;
+  poverty_rate: number | null;
+  child_poverty_rate: number | null;
+  median_household_income: number | null;
+  poverty_count: number | null;
+  child_poverty_count: number | null;
+  source: string;
+}
+
+interface SAIPETimeSeries {
+  year: number;
+  poverty_rate: number | null;
+  child_poverty_rate: number | null;
+  median_household_income: number | null;
+}
+
+interface SAIPEData {
+  snapshot: SAIPESnapshot;
+  time_series: SAIPETimeSeries[];
+}
+
 type VisualizationType = 'overview' | 'comparison' | 'analysis' | 'lorenz' | 'stacked' | 'waffle';
+
+// Maps metro area name → home state full name (for SAIPE + income-lorenz which are state-level)
+const METRO_TO_STATE: Record<string, string> = {
+  'Atlanta':      'Georgia',
+  'Austin':       'Texas',
+  'Boston':       'Massachusetts',
+  'Chicago':      'Illinois',
+  'Dallas':       'Texas',
+  'Denver':       'Colorado',
+  'Houston':      'Texas',
+  'Jacksonville': 'Florida',
+  'Los Angeles':  'California',
+  'Miami':        'Florida',
+  'Minneapolis':  'Minnesota',
+  'New York':     'New York',
+  'Philadelphia': 'Pennsylvania',
+  'Phoenix':      'Arizona',
+  'Portland':     'Oregon',
+  'San Antonio':  'Texas',
+  'San Diego':    'California',
+  'San Jose':     'California',
+  'Seattle':      'Washington',
+  'Washington':   'District of Columbia',
+};
 
 const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, selectedRegion = 'United States' }) => {
   const [regionData, setRegionData] = useState<RegionData | null>(null);
+  const [wealthData, setWealthData] = useState<WealthDistributionData | null>(null);
+  const [saipeData, setSaipeData] = useState<SAIPEData | null>(null);
+  const [incomeDistData, setIncomeDistData] = useState<IncomeLorenzData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('overview');
@@ -42,14 +111,45 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
     const fetchRegionData = async () => {
       setLoading(true);
       setError(null);
+      setIncomeDistData(null);
       try {
-        const response = await fetch(`http://localhost:8000/api/enriched-state/${selectedRegion}`);
-        if (!response.ok) {
-          throw new Error(`Failed to fetch data for ${selectedRegion}`);
+        const isMetro = MAJOR_METRO_AREAS.includes(selectedRegion);
+        const stateForRegion = isMetro ? (METRO_TO_STATE[selectedRegion] ?? selectedRegion) : selectedRegion;
+        const enrichedEndpoint = isMetro
+          ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(selectedRegion)}`
+          : `http://localhost:8000/api/enriched-state/${selectedRegion}`;
+
+        const [regionRes, wealthRes, saipeRes, incomeRes] = await Promise.all([
+          fetch(enrichedEndpoint),
+          fetch('http://localhost:8000/api/wealth-distribution'),
+          fetch(`http://localhost:8000/api/saipe-state/${stateForRegion}`),
+          fetch(`http://localhost:8000/api/income-lorenz/${stateForRegion}`),
+        ]);
+
+        if (regionRes.ok) {
+          const data = await regionRes.json();
+          // Normalise metro response shape to match state shape (state field)
+          if (data.success && data.profile) {
+            if (isMetro && data.metro) data.state = data.metro;
+            setRegionData(data);
+          }
         }
-        const data = await response.json();
-        if (data.success && data.profile) {
-          setRegionData(data);
+
+        if (wealthRes.ok) {
+          const wData = await wealthRes.json();
+          if (wData.success) setWealthData(wData);
+        }
+
+        if (saipeRes.ok) {
+          const sData = await saipeRes.json();
+          if (sData.success) setSaipeData(sData);
+        }
+
+        if (incomeRes.ok) {
+          const iData = await incomeRes.json();
+          if (iData.success && iData.state_specific && iData.data) {
+            setIncomeDistData({ ...iData.data, state_specific: true });
+          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Error fetching data');
@@ -116,7 +216,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             </div>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {metricsToShow.showPopulation && demographics.population !== undefined && (
+            {metricsToShow.showPopulation && demographics.population != null && (
               <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border-l-4 border-blue-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Population</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
@@ -125,7 +225,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Total residents</p>
               </div>
             )}
-            {metricsToShow.showIncome && demographics.median_household_income !== undefined && (
+            {metricsToShow.showIncome && demographics.median_household_income != null && (
               <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 border-l-4 border-green-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Median Income</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
@@ -134,7 +234,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Household annual</p>
               </div>
             )}
-            {metricsToShow.showPoverty && demographics.poverty_rate !== undefined && (
+            {metricsToShow.showPoverty && demographics.poverty_rate != null && (
               <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-4 border-l-4 border-yellow-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Poverty Rate</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
@@ -143,7 +243,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Below poverty line</p>
               </div>
             )}
-            {metricsToShow.showEducation && demographics.education_bachelor_and_above !== undefined && (
+            {metricsToShow.showEducation && demographics.education_bachelor_and_above != null && (
               <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-4 border-l-4 border-purple-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Education</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
@@ -152,13 +252,32 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Bachelor's degree+</p>
               </div>
             )}
-            {metricsToShow.showUnemployment && latestUnemploymentRate !== undefined && (
+            {metricsToShow.showUnemployment && latestUnemploymentRate != null && (
               <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 border-l-4 border-red-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Unemployment</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
                   {latestUnemploymentRate.toFixed(1)}%
                 </p>
                 <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Current rate</p>
+              </div>
+            )}
+            {/* SAIPE-sourced state-specific data */}
+            {saipeData?.snapshot?.child_poverty_rate != null && (
+              <div className="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-4 border-l-4 border-orange-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Child Poverty Rate</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  {saipeData.snapshot.child_poverty_rate.toFixed(1)}%
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Under 18 · SAIPE {saipeData.snapshot.year}</p>
+              </div>
+            )}
+            {saipeData?.snapshot?.median_household_income != null && (
+              <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-4 border-l-4 border-teal-500">
+                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Median Income (SAIPE)</p>
+                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                  ${(saipeData.snapshot.median_household_income / 1000).toFixed(0)}K
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">State estimate · SAIPE {saipeData.snapshot.year}</p>
               </div>
             )}
           </div>
@@ -259,84 +378,119 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       
       {/* Advanced Visualizations */}
       {visualizationType === 'lorenz' && (
-        <LorenzCurve
-          incomeData={generateLorenzData(regionData)}
-          title={`${selectedRegion} - Income Inequality (Lorenz Curve)`}
-        />
+        <div>
+          {/* SAIPE state-specific context banner */}
+          {saipeData?.snapshot && (
+            <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
+              <span className="font-semibold text-indigo-800 dark:text-indigo-300">{selectedRegion} · SAIPE {saipeData.snapshot.year}</span>
+              {saipeData.snapshot.poverty_rate != null && (
+                <span className="text-gray-700 dark:text-gray-300">Poverty Rate: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
+              )}
+              {saipeData.snapshot.child_poverty_rate != null && (
+                <span className="text-gray-700 dark:text-gray-300">Child Poverty: <strong>{saipeData.snapshot.child_poverty_rate.toFixed(1)}%</strong></span>
+              )}
+              {saipeData.snapshot.median_household_income != null && (
+                <span className="text-gray-700 dark:text-gray-300">Median Income: <strong>${saipeData.snapshot.median_household_income.toLocaleString()}</strong></span>
+              )}
+              <span className="text-xs text-indigo-500 dark:text-indigo-400 ml-auto">Source: Census Bureau SAIPE</span>
+            </div>
+          )}
+          <LorenzCurve
+            incomeData={generateLorenzData(regionData, wealthData, incomeDistData)}
+            giniCoefficient={incomeDistData?.gini_coefficient ?? wealthData?.gini_coefficient}
+            title={incomeDistData
+              ? `${selectedRegion} Income Inequality · Gini: ${incomeDistData.gini_coefficient?.toFixed(3) ?? 'N/A'} · Source: Census ACS ${incomeDistData.year}`
+              : `Net Worth Inequality · Gini: ${wealthData ? wealthData.gini_coefficient.toFixed(3) : 'N/A'} · Source: Federal Reserve DFA (National)`
+            }
+          />
+        </div>
       )}
-      
+
       {visualizationType === 'stacked' && (
         <StackedAreaChart
-          data={generateStackedAreaData(regionData)}
-          title={`${selectedRegion} - Income Distribution by Decile Over Time`}
+          data={generateStackedAreaData(regionData, wealthData)}
+          title={`Income Share by Bracket 1989–2025 · Source: Federal Reserve DFA`}
         />
       )}
-      
+
       {visualizationType === 'waffle' && (
-        <WaffleChart
-          data={generateWaffleData(regionData)}
-          title={`${selectedRegion} - Population Distribution by Income Bracket`}
-        />
+        <div>
+          {saipeData?.snapshot && (
+            <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
+              <span className="font-semibold text-purple-800 dark:text-purple-300">{selectedRegion} · SAIPE {saipeData.snapshot.year}</span>
+              {saipeData.snapshot.poverty_rate != null && (
+                <span className="text-gray-700 dark:text-gray-300">All-age Poverty: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
+              )}
+              {saipeData.snapshot.poverty_count != null && (
+                <span className="text-gray-700 dark:text-gray-300">In Poverty: <strong>{saipeData.snapshot.poverty_count.toLocaleString()}</strong> people</span>
+              )}
+              <span className="text-xs text-purple-500 dark:text-purple-400 ml-auto">Source: Census Bureau SAIPE</span>
+            </div>
+          )}
+          <WaffleChart
+            data={generateWaffleData(regionData, wealthData, incomeDistData)}
+            title={incomeDistData
+              ? `${selectedRegion} Income Distribution (${incomeDistData.year}) · Source: Census ACS`
+              : `Income Share Distribution (${wealthData?.data_date ?? 'latest'}) · Source: Federal Reserve DFA`
+            }
+          />
+        </div>
       )}
     </div>
   );
 };
 
 // Helper function to generate Lorenz curve data
-function generateLorenzData(regionData: RegionData | null) {
-  if (!regionData) return [];
-  
-  // Generate mock decile data - in production, this would come from API
+function generateLorenzData(_regionData: RegionData | null, wealthData: WealthDistributionData | null, incomeDistData: IncomeLorenzData | null = null) {
+  // Prefer state-specific ACS income data
+  if (incomeDistData?.lorenz_data?.length) return incomeDistData.lorenz_data;
+  // Fall back to national DFA wealth data
+  if (wealthData?.lorenz_data?.length) return wealthData.lorenz_data;
+
+  // Fallback mock data
   return [
-    { bracket: 'Bottom 10%', percentage: 2, cumulativePopulation: 10, cumulativeWealth: 2 },
-    { bracket: '10-20%', percentage: 3.5, cumulativePopulation: 20, cumulativeWealth: 5.5 },
-    { bracket: '20-30%', percentage: 4.5, cumulativePopulation: 30, cumulativeWealth: 10 },
-    { bracket: '30-40%', percentage: 5.5, cumulativePopulation: 40, cumulativeWealth: 15.5 },
-    { bracket: '40-50%', percentage: 6.5, cumulativePopulation: 50, cumulativeWealth: 22 },
-    { bracket: '50-60%', percentage: 7.5, cumulativePopulation: 60, cumulativeWealth: 29.5 },
-    { bracket: '60-70%', percentage: 9, cumulativePopulation: 70, cumulativeWealth: 38.5 },
-    { bracket: '70-80%', percentage: 11, cumulativePopulation: 80, cumulativeWealth: 49.5 },
-    { bracket: '80-90%', percentage: 14, cumulativePopulation: 90, cumulativeWealth: 63.5 },
-    { bracket: 'Top 10%', percentage: 36.5, cumulativePopulation: 100, cumulativeWealth: 100 },
+    { bracket: 'Origin',        percentage: 0,    cumulativePopulation: 0,   cumulativeWealth: 0 },
+    { bracket: 'Bottom 50%',    percentage: 2.5,  cumulativePopulation: 50,  cumulativeWealth: 2.5 },
+    { bracket: 'Next 40%',      percentage: 30.1, cumulativePopulation: 90,  cumulativeWealth: 32.6 },
+    { bracket: 'Next 9%',       percentage: 36.4, cumulativePopulation: 99,  cumulativeWealth: 69.0 },
+    { bracket: 'Top 1-0.1%',    percentage: 17.1, cumulativePopulation: 99.9,cumulativeWealth: 86.1 },
+    { bracket: 'Top 0.1%',      percentage: 13.9, cumulativePopulation: 100, cumulativeWealth: 100 },
   ];
 }
 
 // Helper function to generate stacked area chart data
-function generateStackedAreaData(regionData: RegionData | null) {
-  if (!regionData) return [];
-  
-  // Generate mock time series data
+function generateStackedAreaData(_regionData: RegionData | null, wealthData: WealthDistributionData | null): { year: number; [decile: string]: string | number }[] {
+  // Use real Federal Reserve DFA time series if available
+  if (wealthData?.stacked_data?.length) return wealthData.stacked_data as { year: number; [decile: string]: string | number }[];
+
+  // Fallback mock data
   const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
   return years.map(year => ({
     year,
-    'Bottom 10%': 2 + Math.random() * 0.5,
-    '10-20%': 3.5 + Math.random() * 0.5,
-    '20-30%': 4.5 + Math.random() * 0.5,
-    '30-40%': 5.5 + Math.random() * 0.5,
-    '40-50%': 6.5 + Math.random() * 0.5,
-    '50-60%': 7.5 + Math.random() * 0.5,
-    '60-70%': 9 + Math.random() * 0.5,
-    '70-80%': 11 + Math.random() * 0.5,
-    '80-90%': 14 + Math.random() * 0.5,
-    'Top 10%': 36.5 + Math.random() * 1,
+    'Bottom 20%': 3 + Math.random() * 0.3,
+    '20-40%':     7 + Math.random() * 0.3,
+    '40-60%':     12 + Math.random() * 0.3,
+    '60-80%':     18 + Math.random() * 0.3,
+    '80-99%':     40 + Math.random() * 0.5,
+    'Top 1%':     17 + Math.random() * 0.5,
   }));
 }
 
 // Helper function to generate waffle chart data
-function generateWaffleData(regionData: RegionData | null) {
-  if (!regionData) return [];
-  
+function generateWaffleData(_regionData: RegionData | null, wealthData: WealthDistributionData | null, incomeDistData: IncomeLorenzData | null = null) {
+  // Prefer state-specific ACS income data
+  if (incomeDistData?.waffle_data?.length) return incomeDistData.waffle_data;
+  // Fall back to national DFA data
+  if (wealthData?.waffle_data?.length) return wealthData.waffle_data;
+
+  // Fallback mock data
   return [
-    { bracket: 'Bottom 10%', percentage: 2, color: '#ef4444' },
-    { bracket: '10-20%', percentage: 3.5, color: '#f97316' },
-    { bracket: '20-30%', percentage: 4.5, color: '#eab308' },
-    { bracket: '30-40%', percentage: 5.5, color: '#84cc16' },
-    { bracket: '40-50%', percentage: 6.5, color: '#22c55e' },
-    { bracket: '50-60%', percentage: 7.5, color: '#10b981' },
-    { bracket: '60-70%', percentage: 9, color: '#14b8a6' },
-    { bracket: '70-80%', percentage: 11, color: '#06b6d4' },
-    { bracket: '80-90%', percentage: 14, color: '#0ea5e9' },
-    { bracket: 'Top 10%', percentage: 36.5, color: '#3b82f6' },
+    { bracket: 'Bottom 20%', percentage: 3,    color: '#ef4444' },
+    { bracket: '20-40%',     percentage: 7,    color: '#f97316' },
+    { bracket: '40-60%',     percentage: 12,   color: '#eab308' },
+    { bracket: '60-80%',     percentage: 18,   color: '#22c55e' },
+    { bracket: '80-99%',     percentage: 43,   color: '#0ea5e9' },
+    { bracket: 'Top 1%',     percentage: 17,   color: '#3b82f6' },
   ];
 }
 
