@@ -1,0 +1,862 @@
+{
+  "region_policy_history": {
+    "California": [
+      {
+        "policy": "AB5 – Gig Worker Reclassification",
+        "period": "2019–2020",
+        "category": "Employment",
+        "description": "Required companies like Uber and Lyft to classify most independent contractors as employees, entitling them to minimum wage, overtime, and benefits.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "gig_workers_affected": "1M+",
+            "median_gig_income": "$28,000"
+          },
+          "after": {
+            "gig_worker_reclassification_rate": "low – Prop 22 exempted rideshare"
+          }
+        },
+        "measured_effects": [
+          "Immediately challenged by Uber, Lyft, DoorDash; overridden by Prop 22 (64% vote) for gig companies",
+          "Non-gig industries (trucking, freelance journalists) saw wage gains and increased employer costs",
+          "Estimated 100,000+ workers moved to employee status in non-exempt sectors"
+        ],
+        "lessons": [
+          "Contractor reclassification is politically viable in limited sectors",
+          "Platform companies can mobilize ballot measures to carve out exemptions",
+          "Enforcement infrastructure is critical; legislation alone is insufficient"
+        ],
+        "sources": [
+          "CA Department of Industrial Relations",
+          "EPI 2020",
+          "UC Berkeley Labor Center"
+        ]
+      },
+      {
+        "policy": "Minimum Wage Escalation to $15 (SB 3)",
+        "period": "2016–2023",
+        "category": "Income Support",
+        "description": "Phased statewide minimum wage increase from $10 to $15/hr, implemented over 6 years with regional variations.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "min_wage": "$10/hr (2016)",
+            "low_wage_worker_share": "~25%"
+          },
+          "after": {
+            "min_wage": "$15.50/hr (2023)",
+            "income_gain_bottom_quintile": "+11%"
+          }
+        },
+        "measured_effects": [
+          "Low-wage workers earned ~$4,000 more annually by 2022 (UC Berkeley)",
+          "Restaurant employment did not significantly decline statewide",
+          "SNAP enrollment fell 15% in counties with early adoption",
+          "Fast-food sector faced higher costs; some automation investment accelerated"
+        ],
+        "lessons": [
+          "Phased increases reduce business disruption vs. sudden jumps",
+          "Effect on employment was neutral to slightly positive in large metro areas",
+          "Low-income households saw real purchasing power gains; Gini improvement modest"
+        ],
+        "sources": [
+          "UC Berkeley IRLE",
+          "BLS CES",
+          "CalMatters 2023"
+        ]
+      },
+      {
+        "policy": "Proposition 13 – Property Tax Cap",
+        "period": "1978–present",
+        "category": "Taxation",
+        "description": "Capped property taxes at 1% of assessed value with maximum 2% annual increase, effectively freezing valuations for long-term owners.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "avg_property_tax_rate": "~2.5%"
+          },
+          "after": {
+            "avg_effective_rate": "~0.73%",
+            "school_funding_drop": "~40% real terms by 1990"
+          }
+        },
+        "measured_effects": [
+          "Saved long-term homeowners ~$528B cumulatively by 2018",
+          "Concentrated wealth in existing homeowners; renters and new buyers disadvantaged",
+          "K-12 school funding dropped from 1st to 27th nationally within 10 years",
+          "Creates $12B annual tax cliff between identical adjacent properties"
+        ],
+        "lessons": [
+          "Tax restrictions designed for middle class primarily benefit wealthy long-term owners",
+          "Education underfunding from property tax cuts correlates with wage stagnation 20 years later",
+          "Hard to reverse politically once entrenched beneficiaries exist"
+        ],
+        "sources": [
+          "CA Legislative Analyst Office",
+          "Stanford CEPA",
+          "Chapman Economic Forecast"
+        ]
+      },
+      {
+        "policy": "EITC Expansion + CalEITC",
+        "period": "2015–present",
+        "category": "Income Support",
+        "description": "California created its own refundable Earned Income Tax Credit layered on top of the federal EITC, targeting households earning under $30,000.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "child_poverty_rate": "21% (2014)"
+          },
+          "after": {
+            "child_poverty_rate": "14.7% (2022)",
+            "avg_benefit": "$1,200/year"
+          }
+        },
+        "measured_effects": [
+          "1.5M families received credits totaling $1.4B in 2022",
+          "Working-poor households saw ~$1,200 average annual benefit",
+          "Child food insecurity fell 18% in high-participation counties",
+          "Healthcare utilization improved as disposable income rose"
+        ],
+        "lessons": [
+          "State-level EITC complements federal EITC effectively for very low-income workers",
+          "Direct income support achieves faster poverty-rate improvement than trickle-down",
+          "Cost-effective: $1 in EITC generates $1.50–$2 in local economic activity"
+        ],
+        "sources": [
+          "CA Franchise Tax Board",
+          "Stanford SIEPR",
+          "PPIC 2023"
+        ]
+      },
+      {
+        "policy": "SB 9 – Duplex Legalization (Housing Supply)",
+        "period": "2021–present",
+        "category": "Housing",
+        "description": "Legalized duplexes and lot splits statewide, overriding local single-family zoning to increase housing supply in high-cost areas.",
+        "outcome": "ongoing",
+        "metrics": {
+          "before": {
+            "housing_shortage": "3.5M units",
+            "median_home_price": "$650K"
+          },
+          "after": {
+            "sb9_permits_issued": "~13,000 by end 2023 (below projections)"
+          }
+        },
+        "measured_effects": [
+          "Implementation slow; many cities added restrictive conditions limiting uptake",
+          "Economists project 700K additional units over 10 years at full adoption",
+          "Cities near transit corridors saw more uptake than rural areas",
+          "Impact on affordability minimal in short term due to slow permitting"
+        ],
+        "lessons": [
+          "Supply reforms need streamlined permitting to have impact; zoning reform alone insufficient",
+          "Local implementation fidelity is the critical bottleneck for state housing law",
+          "Wealth inequality in housing requires both supply AND demand (subsidy) solutions"
+        ],
+        "sources": [
+          "CA Dept of Housing",
+          "RAND 2023",
+          "Terner Center UC Berkeley"
+        ]
+      }
+    ],
+    "New York": [
+      {
+        "policy": "NYC Rent Stabilization & Rent Control",
+        "period": "1969–present",
+        "category": "Housing",
+        "description": "1M+ NYC apartments subject to rent stabilization laws limiting annual increases; rent control for pre-1974 buildings.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "unregulated_rent_growth": "5–8%/yr"
+          },
+          "after": {
+            "stabilized_unit_avg_rent": "$1,390 vs $2,400 market (2023)"
+          }
+        },
+        "measured_effects": [
+          "Existing tenants in controlled units saved ~$600/month vs. market rate",
+          "Reduced housing mobility: tenants stay 2× longer, reducing labor market flexibility",
+          "Unregulated market rents inflated 40–60% faster as supply constrained",
+          "Landlord disinvestment in stabilized units led to deteriorating stock"
+        ],
+        "lessons": [
+          "Rent control protects current tenants but worsens affordability for newcomers",
+          "Works best combined with aggressive new supply construction",
+          "Without supply expansion, price controls shift the crisis to unregulated sectors"
+        ],
+        "sources": [
+          "NYC Rent Guidelines Board",
+          "Stanford Diamond et al. 2019",
+          "NYC Housing Survey"
+        ]
+      },
+      {
+        "policy": "NY EITC + Child Tax Credit Expansion",
+        "period": "2017–present",
+        "category": "Income Support",
+        "description": "New York expanded its state EITC to 30% of federal credit and created an Empire State Child Credit of $330 per child.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "child_poverty_rate": "18.5% (2016)"
+          },
+          "after": {
+            "child_poverty_rate": "14.2% (2023)",
+            "families_benefiting": "1.2M"
+          }
+        },
+        "measured_effects": [
+          "750,000 families received average of $1,100 in combined EITC credits",
+          "Child poverty declined 4.3 percentage points over 6 years",
+          "Strong take-up in high-poverty areas (Bronx, Buffalo, Rochester)"
+        ],
+        "lessons": [
+          "Stacking state + federal credits creates meaningful income floor for working families",
+          "Per-child credits especially effective in high-cost urban areas"
+        ],
+        "sources": [
+          "NY Dept of Taxation & Finance",
+          "Fiscal Policy Institute NY"
+        ]
+      },
+      {
+        "policy": "Amazon HQ2 Rejection (Long Island City)",
+        "period": "2018–2019",
+        "category": "Employment",
+        "description": "NYC offered Amazon $3B in tax incentives for a 25,000-job campus. Community opposition led Amazon to withdraw.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "projected_jobs": "25,000",
+            "projected_tax_revenue": "$27B over 25 yrs"
+          },
+          "after": {
+            "actual_outcome": "Amazon withdrew; LIC still gentrifying independently"
+          }
+        },
+        "measured_effects": [
+          "Short-term property values in LIC fell ~5% after withdrawal then rebounded",
+          "NYC missed projected $27B in tax revenue over 25 years",
+          "Demonstrated power of community organizing over corporate subsidy politics"
+        ],
+        "lessons": [
+          "Tax incentive megadeals can backfire if community displacement concerns not addressed",
+          "Corporate job creation without affordable housing guarantees accelerates inequality",
+          "Negotiated community benefit agreements should precede large incentive packages"
+        ],
+        "sources": [
+          "NYC IBO",
+          "Regional Plan Association",
+          "NYT 2019"
+        ]
+      },
+      {
+        "policy": "NYS Millionaire's Tax (Top Marginal Rate 10.9%)",
+        "period": "2021–present",
+        "category": "Taxation",
+        "description": "Raised top marginal income tax rate to 10.9% for incomes over $25M, highest state rate in the US, generating revenue for social programs.",
+        "outcome": "ongoing",
+        "metrics": {
+          "before": {
+            "top_rate": "8.82%"
+          },
+          "after": {
+            "top_rate": "10.9%",
+            "projected_revenue": "$4.3B/yr"
+          }
+        },
+        "measured_effects": [
+          "Generated ~$4B additional revenue in FY2022 used for schools and healthcare",
+          "High-income migration to FL/TX may account for 1–2% of high earners (debated)",
+          "Funded universal pre-K expansion in NYC and rural school aid"
+        ],
+        "lessons": [
+          "State-level high earner taxes generate significant revenue without broad out-migration",
+          "Revenue earmarking for visible services reduces political backlash",
+          "Migration effects are real but modest compared to revenue gains"
+        ],
+        "sources": [
+          "NY Dept of Taxation",
+          "IBO NYC",
+          "Princeton Policy Lab 2022"
+        ]
+      }
+    ],
+    "Texas": [
+      {
+        "policy": "No State Income Tax + Enterprise Zones",
+        "period": "1845–present (enterprise zones 1984–present)",
+        "category": "Taxation",
+        "description": "Texas has no state income tax, funded by high property/sales taxes. Enterprise zones offer tax incentives for business relocation to low-income areas.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {},
+          "after": {
+            "gdp_growth_2010_2023": "92%",
+            "gini_coefficient": "0.497",
+            "poverty_rate": "14.2%"
+          }
+        },
+        "measured_effects": [
+          "Texas GDP grew 92% from 2010–2023, fastest of large states",
+          "High job creation concentrated in metro areas; rural Texas saw minimal benefit",
+          "Bottom 20% pay 12% of income in taxes vs. 3.5% for top 1% (regressive structure)",
+          "School funding crisis: per-pupil spending 38th nationally despite property wealth"
+        ],
+        "lessons": [
+          "No-income-tax model generates growth but concentrates gains at top; Gini remains high",
+          "Regressive tax structure harms low-income households disproportionately",
+          "Growth without redistribution mechanism leaves poverty rates elevated"
+        ],
+        "sources": [
+          "TX Comptroller",
+          "Institute on Taxation & Economic Policy",
+          "TX Education Agency"
+        ]
+      },
+      {
+        "policy": "Texas Enterprise Fund (Selective Corporate Incentives)",
+        "period": "2003–present",
+        "category": "Employment",
+        "description": "Governor-controlled $500M fund offering direct grants to recruit companies to Texas; dubbed 'deal-closing fund.'",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {},
+          "after": {
+            "jobs_claimed": "93,000",
+            "cost_per_job": "$9,500–$50,000"
+          }
+        },
+        "measured_effects": [
+          "Attracted major employers (Apple, Tesla factories, Oracle HQ)",
+          "Cost-benefit audits found 40% of jobs would have come anyway (deadweight loss)",
+          "Benefits concentrated in high-skilled, high-wage roles; minimal impact on Gini"
+        ],
+        "lessons": [
+          "Selective corporate incentives create headline jobs but don't improve inequality",
+          "Benefits predominantly reach high-wage workers, leaving low-income communities behind",
+          "Transparent accountability and clawback provisions improve program effectiveness"
+        ],
+        "sources": [
+          "TX Legislative Budget Board",
+          "Good Jobs First",
+          "Pew Charitable Trusts"
+        ]
+      },
+      {
+        "policy": "Medicaid Non-Expansion (ACA Refusal)",
+        "period": "2010–present",
+        "category": "Healthcare",
+        "description": "Texas is one of 10 states that did not expand Medicaid under the ACA, leaving ~1.5M low-income adults in a coverage gap.",
+        "outcome": "negative",
+        "metrics": {
+          "before": {
+            "uninsured_rate": "~24% (2013)"
+          },
+          "after": {
+            "uninsured_rate": "~17.1% (2023), highest of all large states"
+          }
+        },
+        "measured_effects": [
+          "~1.5M Texans remain in coverage gap (income too high for Medicaid, too low for ACA subsidies)",
+          "Rural hospital closures accelerated: 25+ hospitals closed 2010–2023",
+          "Medical debt is leading cause of personal bankruptcy in Texas",
+          "Foregone federal dollars: ~$10B/yr in Medicaid match Texas has not claimed"
+        ],
+        "lessons": [
+          "Healthcare non-expansion concentrates medical debt in low-income households, worsening wealth gap",
+          "Rural hospital loss from low reimbursement creates healthcare deserts perpetuating economic decline",
+          "States that expanded Medicaid saw 5–10% improvements in low-income household financial health"
+        ],
+        "sources": [
+          "Kaiser Family Foundation",
+          "TX Dept of State Health Services",
+          "Robert Wood Johnson Foundation"
+        ]
+      }
+    ],
+    "Mississippi": [
+      {
+        "policy": "Income Tax Phase-Out (SB 2971)",
+        "period": "2022–2032",
+        "category": "Taxation",
+        "description": "Passed phased elimination of state income tax, projected to fully eliminate by 2032, modeled after Texas/Florida approach.",
+        "outcome": "ongoing",
+        "metrics": {
+          "before": {
+            "income_tax_rate": "5%",
+            "state_poverty_rate": "19.4%"
+          },
+          "after": {
+            "projected_revenue_loss": "$525M/yr at full phase",
+            "current_status": "ongoing phase"
+          }
+        },
+        "measured_effects": [
+          "Mississippi has highest poverty rate in US (19.4%) and lowest median income ($46K)",
+          "Income tax elimination disproportionately benefits top earners; bottom 40% see <$200/yr savings",
+          "Similar policy in Kansas (2012) led to fiscal crisis, reversed 5 years later"
+        ],
+        "lessons": [
+          "Income tax elimination in high-poverty states risks starving essential services used by the poor",
+          "Kansas experiment (2012–2017) is cautionary: budget shortfalls led to school funding cuts",
+          "Revenue-neutral tax reform requires offsetting consumption taxes which hit low earners harder"
+        ],
+        "sources": [
+          "MS Dept of Revenue",
+          "ITEP",
+          "Center on Budget and Policy Priorities"
+        ]
+      },
+      {
+        "policy": "Historically Black Colleges & Universities (HBCU) Investment",
+        "period": "2000–present",
+        "category": "Education",
+        "description": "Federal and state investment in HBCUs including Alcorn State and Jackson State, aimed at closing racial wealth gap through education.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "black_bachelor_degree_rate": "12% (2000)"
+          },
+          "after": {
+            "black_bachelor_degree_rate": "22% (2023)",
+            "hbcu_enrollment": "+18%"
+          }
+        },
+        "measured_effects": [
+          "HBCU graduates earn 32% more than non-HBCU Black graduates from same income background",
+          "Jackson area shows strongest correlation between HBCU expansion and Black entrepreneurship",
+          "Economic multiplier: each HBCU graduate contributes ~$1.4M to state GDP over career"
+        ],
+        "lessons": [
+          "Education investment with targeted inclusion is strongest long-term wealth gap intervention",
+          "HBCUs outperform PWIs for Black student social mobility in high-poverty states",
+          "Sustained multi-decade investment required; results lag 10–20 years"
+        ],
+        "sources": [
+          "UNCF",
+          "Brookings 2021",
+          "MS Institutions of Higher Learning"
+        ]
+      }
+    ],
+    "Massachusetts": [
+      {
+        "policy": "Chapter 58 – Universal Healthcare (RomneyCare)",
+        "period": "2006–present",
+        "category": "Healthcare",
+        "description": "Enacted near-universal state health coverage using individual mandate, Medicaid expansion, and subsidized exchange — forerunner to ACA.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "uninsured_rate": "6.3% (2006)"
+          },
+          "after": {
+            "uninsured_rate": "2.5% (2023)",
+            "medical_bankruptcy_drop": "~40%"
+          }
+        },
+        "measured_effects": [
+          "Uninsured rate fell from 6.3% to 2.5%, lowest in the nation",
+          "Medical bankruptcies dropped ~40% within 5 years",
+          "Low-income households' financial health improved markedly (less debt, more savings)",
+          "Cost per capita comparable to other New England states; no fiscal crisis"
+        ],
+        "lessons": [
+          "State-level universal coverage is achievable and fiscally sustainable",
+          "Combination of individual mandate + subsidies + employer requirements achieves near-universal coverage",
+          "Healthcare security directly improves low-income household wealth accumulation"
+        ],
+        "sources": [
+          "MA Health Connector",
+          "NBER 2008",
+          "Urban Institute 2012"
+        ]
+      },
+      {
+        "policy": "Life Sciences Investment Initiative",
+        "period": "2008–present",
+        "category": "Employment",
+        "description": "State committed $1B over 10 years to subsidize life sciences industry through R&D tax credits, facility grants, and workforce training.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "life_sci_jobs_2008": "60,000"
+          },
+          "after": {
+            "life_sci_jobs_2023": "120,000+",
+            "avg_salary": "$115,000"
+          }
+        },
+        "measured_effects": [
+          "Industry doubled to 120,000 jobs in 15 years",
+          "Average sector salary $115K vs. state median $89K",
+          "But: gains concentrated in Boston/Cambridge; rural MA saw minimal benefit",
+          "Skills mismatch: 40% of positions require advanced degrees unavailable to low-income workers"
+        ],
+        "lessons": [
+          "High-skill industry investment creates wealth but widens education-based inequality without inclusion pathways",
+          "Workforce training pipelines from community colleges must be co-developed with industry investment",
+          "Geographic concentration of economic development deepens urban-rural divide"
+        ],
+        "sources": [
+          "MA Life Sciences Center",
+          "MassBio 2023",
+          "UMass Donahue Institute"
+        ]
+      },
+      {
+        "policy": "Question 1 – 4% Millionaire Surtax",
+        "period": "2022–present",
+        "category": "Taxation",
+        "description": "Ballot initiative added 4% surtax on incomes over $1M, dedicated to education and transportation funding.",
+        "outcome": "ongoing",
+        "metrics": {
+          "before": {
+            "top_rate": "5%"
+          },
+          "after": {
+            "top_rate": "9%",
+            "revenue_yr1": "$1.8B"
+          }
+        },
+        "measured_effects": [
+          "Raised $1.8B in first year, exceeding $1B projection",
+          "Funded free community college for residents earning under $75K",
+          "Some high-earner out-migration: 2–3% relocation to NH/FL (early estimates)",
+          "Education and transportation spending increased immediately"
+        ],
+        "lessons": [
+          "Dedicated millionaire surtax revenue is politically durable when clearly earmarked",
+          "Higher-income migration is real but modest; revenue gains far outweigh migration losses",
+          "Education investment tied to millionaire tax creates visible equity narrative"
+        ],
+        "sources": [
+          "MA Dept of Revenue FY2023",
+          "Greater Boston Chamber",
+          "MassBudget 2023"
+        ]
+      }
+    ],
+    "Washington": [
+      {
+        "policy": "Seattle $15 Minimum Wage (Ord. 124490)",
+        "period": "2015–2021",
+        "category": "Income Support",
+        "description": "Seattle phased in $15/hr minimum wage starting 2015, reaching $15 for large employers by 2017 and small employers by 2019.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "min_wage": "$9.47/hr (2014)",
+            "food_service_jobs": "baseline 100"
+          },
+          "after": {
+            "min_wage": "$19.97/hr (2024)",
+            "low_wage_worker_income_gain": "+$1,000–$2,000/yr"
+          }
+        },
+        "measured_effects": [
+          "University of Washington study: low-wage workers earned +$1,100/yr after increase",
+          "Food service employment remained stable; some shift toward full-time hours",
+          "UW 2017 study found hours reduction initially; later work showed income gains net positive",
+          "Broader regional effect: surrounding counties also raised wages to compete"
+        ],
+        "lessons": [
+          "Minimum wage increases in high-cost cities deliver net income gains to low-wage workers",
+          "Hours reduction is a transitional effect; annual income impact is positive",
+          "Phased implementation gives businesses time to adjust"
+        ],
+        "sources": [
+          "UW Evans School",
+          "UC Berkeley IRLE",
+          "BLS 2021"
+        ]
+      },
+      {
+        "policy": "WA State Income Tax Ban (Constitutional Prohibition)",
+        "period": "1933–present",
+        "category": "Taxation",
+        "description": "State constitution interpreted to prohibit graduated income tax; multiple ballot measures to change have failed. Funded by sales + B&O taxes.",
+        "outcome": "negative",
+        "metrics": {
+          "before": {},
+          "after": {
+            "gini": "0.485",
+            "bottom_20pct_tax_burden": "~16% of income vs 4% top 1%"
+          }
+        },
+        "measured_effects": [
+          "Washington has one of most regressive tax systems nationally",
+          "Bottom 20% pay 4× their income share in taxes vs. top 1%",
+          "Despite high tech-sector growth, poverty rate 9.5% and wealth inequality high in rural areas",
+          "Repeated ballot measures for capital gains or income tax have failed"
+        ],
+        "lessons": [
+          "Reliance on sales taxes makes states highly dependent on consumption and regresses income distribution",
+          "Tech-sector growth in no-income-tax states concentrates wealth without redistribution mechanism",
+          "Narrow capital gains taxes ($262M in WA 2023) can partially offset regressive structure"
+        ],
+        "sources": [
+          "ITEP",
+          "WA Dept of Revenue",
+          "Institute for Public Policy"
+        ]
+      }
+    ],
+    "Michigan": [
+      {
+        "policy": "Detroit Bankruptcy & Municipal Restructuring",
+        "period": "2013–2014",
+        "category": "Employment",
+        "description": "Detroit filed Chapter 9 bankruptcy ($18B debt), restructuring pension obligations and city services in the largest US municipal bankruptcy.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "unemployment": "23% (2013)",
+            "population_loss_since_1950": "-60%"
+          },
+          "after": {
+            "unemployment": "10.5% (2023)",
+            "downtown_investment": "$10B+ by 2023"
+          }
+        },
+        "measured_effects": [
+          "Downtown business district revitalized; 15,000 new jobs in tech/creative",
+          "Pensioners took 4.5% cut; inequality between pensioners and creditors stoked resentment",
+          "Surrounding neighborhoods saw minimal investment benefit; concentrated in ~2 sq miles",
+          "Blight demolition: 20,000 abandoned structures removed, reducing crime 15%"
+        ],
+        "lessons": [
+          "Bankruptcy restructuring enables fiscal recovery but distributes costs to vulnerable populations",
+          "Urban revitalization without geographic equity reinforces neighborhood-level inequality",
+          "De-industrialization requires 20+ year horizon; no short-term policy fully compensates"
+        ],
+        "sources": [
+          "Detroit Future City",
+          "MI Dept of Treasury",
+          "Brookings 2018"
+        ]
+      },
+      {
+        "policy": "Michigan No-Fault Auto Insurance Reform",
+        "period": "2019–present",
+        "category": "Healthcare",
+        "description": "Reformed nation's only unlimited PIP no-fault system; gave drivers choice of coverage level, lowering mandatory premiums.",
+        "outcome": "ongoing",
+        "metrics": {
+          "before": {
+            "avg_detroit_auto_premium": "$5,414/yr (highest in US)"
+          },
+          "after": {
+            "avg_detroit_premium_2023": "$3,200/yr",
+            "uninsured_rate_drop": "estimated -6%"
+          }
+        },
+        "measured_effects": [
+          "Detroit premiums dropped ~40%; uninsured driving declined",
+          "Providers saw revenue decline; concerns over long-term injury coverage adequacy",
+          "Low-income households regained vehicle access, improving employment reachability"
+        ],
+        "lessons": [
+          "Mandatory cost reductions improve participation among those with constrained budgets",
+          "Auto access directly correlates with employment opportunity in non-transit cities",
+          "Regulatory reform can be a wealth-distribution tool in high-cost mandatory services"
+        ],
+        "sources": [
+          "MI Dept of Insurance",
+          "Insurance Alliance of Michigan",
+          "Urban Institute 2021"
+        ]
+      }
+    ],
+    "Oregon": [
+      {
+        "policy": "Measure 110 – Drug Decriminalization",
+        "period": "2020–2023",
+        "category": "Healthcare",
+        "description": "Decriminalized possession of small amounts of all drugs; redirected cannabis tax revenue to addiction recovery clinics.",
+        "outcome": "negative",
+        "metrics": {
+          "before": {
+            "drug_arrest_rate": "baseline",
+            "overdose_deaths_2020": "280"
+          },
+          "after": {
+            "overdose_deaths_2023": "956",
+            "recovery_clinic_uptake": "<1% of eligible"
+          }
+        },
+        "measured_effects": [
+          "Overdose deaths tripled from 280 (2020) to 956 (2023)",
+          "Recovery clinic infrastructure was not built before decriminalization took effect",
+          "Police unable to compel treatment without criminal leverage",
+          "Legislature reversed decriminalization in 2024 after failure"
+        ],
+        "lessons": [
+          "Decriminalization without pre-built treatment infrastructure accelerates harm",
+          "Sequencing matters: infrastructure must precede enforcement removal",
+          "Policy rollout timelines must match capability development timelines"
+        ],
+        "sources": [
+          "OR Health Authority",
+          "RAND 2023",
+          "OR Legislative Assembly"
+        ]
+      },
+      {
+        "policy": "Portland Inclusionary Zoning (IZ) with Affordability Mandates",
+        "period": "2017–present",
+        "category": "Housing",
+        "description": "Required residential buildings of 20+ units to include 20% affordable units (at 80% AMI) or pay into affordable housing fund.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "affordable_units_pipeline": "3,000/yr"
+          },
+          "after": {
+            "new_permits_drop": "-23% yr1",
+            "affordable_units_added_via_IZ": "1,200 by 2022"
+          }
+        },
+        "measured_effects": [
+          "Market-rate residential permits dropped 23% in first year after mandate",
+          "Developers chose 'in-lieu' payment over building affordable units in 60% of cases",
+          "Fund generated $24M for dedicated affordable housing projects",
+          "Net affordable units lower than pre-IZ pipeline due to overall permit decline"
+        ],
+        "lessons": [
+          "Inclusionary zoning can suppress overall supply if compliance cost is too high",
+          "In-lieu fee alternative may be more efficient than on-site unit mandates",
+          "Affordable housing goals require parallel public construction, not just private mandates"
+        ],
+        "sources": [
+          "Portland Bureau of Development Services",
+          "Furman Center NYU",
+          "Terner Center 2021"
+        ]
+      }
+    ],
+    "National": [
+      {
+        "policy": "2017 Tax Cuts and Jobs Act (TCJA)",
+        "period": "2017–2025",
+        "category": "Taxation",
+        "description": "Reduced corporate tax rate from 35% to 21%, cut individual income taxes, doubled standard deduction, capped SALT deductions at $10K.",
+        "outcome": "mixed",
+        "metrics": {
+          "before": {
+            "corp_rate": "35%",
+            "gini": "0.489"
+          },
+          "after": {
+            "corp_rate": "21%",
+            "gini_2023": "0.494",
+            "s&p500_gain_3yr": "+55%"
+          }
+        },
+        "measured_effects": [
+          "Corporate profits hit record highs; S&P 500 returned 55% in 3 years post-TCJA",
+          "Business investment increased modestly (~2% above trend)",
+          "Worker wages did not broadly increase; share buybacks > wage growth 5:1",
+          "Gini coefficient continued rising; TCJA had no measurable reduction in poverty"
+        ],
+        "lessons": [
+          "Corporate tax cuts primarily transfer wealth to shareholders, not workers",
+          "Supply-side tax policy is ineffective at reducing inequality",
+          "SALT cap disproportionately harmed high-tax Democratic states (CA, NY, NJ)"
+        ],
+        "sources": [
+          "CBO 2019",
+          "Brookings Tax Policy Center",
+          "Fed Reserve 2022"
+        ]
+      },
+      {
+        "policy": "American Rescue Plan – Child Tax Credit Expansion",
+        "period": "2021",
+        "category": "Income Support",
+        "description": "Expanded Child Tax Credit to $3,000/child ($3,600 under 6), made fully refundable and paid monthly, for calendar year 2021.",
+        "outcome": "positive",
+        "metrics": {
+          "before": {
+            "child_poverty_rate": "14.2% (2020)"
+          },
+          "after": {
+            "child_poverty_rate": "5.2% (2021)",
+            "families_receiving": "39M"
+          }
+        },
+        "measured_effects": [
+          "Child poverty fell from 14.2% to 5.2% — single largest 1-year poverty decline in US history",
+          "39M families received monthly payments averaging $430/month",
+          "Food insufficiency among families with children fell 25% in 6 months",
+          "Expired December 2021; child poverty rebounded to 12.4% by 2022"
+        ],
+        "lessons": [
+          "Direct income transfer is the fastest proven mechanism for poverty reduction",
+          "Expiration effect proves sustainability requires permanent authorization",
+          "Monthly payment structure superior to annual lump sum for household stability"
+        ],
+        "sources": [
+          "Columbia CPOP",
+          "Census Bureau SPMPP 2022",
+          "Urban Institute"
+        ]
+      }
+    ]
+  },
+  "region_aliases": {
+    "los angeles": "California",
+    "san francisco": "California",
+    "bay area": "California",
+    "silicon valley": "California",
+    "san jose": "California",
+    "sacramento": "California",
+    "new york city": "New York",
+    "nyc": "New York",
+    "manhattan": "New York",
+    "brooklyn": "New York",
+    "bronx": "New York",
+    "buffalo": "New York",
+    "houston": "Texas",
+    "dallas": "Texas",
+    "austin": "Texas",
+    "san antonio": "Texas",
+    "detroit": "Michigan",
+    "ann arbor": "Michigan",
+    "flint": "Michigan",
+    "grand rapids": "Michigan",
+    "boston": "Massachusetts",
+    "cambridge": "Massachusetts",
+    "worcester": "Massachusetts",
+    "seattle": "Washington",
+    "tacoma": "Washington",
+    "spokane": "Washington",
+    "portland": "Oregon",
+    "jackson": "Mississippi",
+    "biloxi": "Mississippi",
+    "chicago": "Illinois",
+    "illinois": "Illinois",
+    "miami": "Florida",
+    "orlando": "Florida",
+    "tampa": "Florida",
+    "florida": "Florida",
+    "atlanta": "Georgia",
+    "georgia": "Georgia",
+    "phoenix": "Arizona",
+    "tucson": "Arizona",
+    "arizona": "Arizona",
+    "denver": "Colorado",
+    "colorado": "Colorado",
+    "us": "National",
+    "usa": "National",
+    "united states": "National",
+    "america": "National",
+    "federal": "National",
+    "national": "National"
+  }
+}
