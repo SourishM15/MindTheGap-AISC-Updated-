@@ -13,11 +13,13 @@ import pandas as pd
 import networkx as nx
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from dotenv import load_dotenv
 from graph_rag import get_graph_rag_context
 from vector_embeddings import VectorStore
 from trend_analysis import TrendAnalyzer, analyze_wealth_gap_trends
 from policy_recommendations import get_policy_recommendations_for_region
+from regional_policy_history import get_policy_history_context, get_policy_brief_for_api, get_available_regions
 from government_api import get_local_economic_indicators, clear_api_cache
 from s3_data_loader import s3_loader
 from city_api_client import city_client
@@ -401,16 +403,20 @@ class PolicyRequest(BaseModel):
 
 
 # --- Chat Endpoint (Enhanced) ---
-def build_conversation_context(history: list[Message]) -> str:
-    """Build conversation context from chat history"""
-    if not history:
-        return ""
-    
-    context = "Previous conversation:\n"
-    for msg in history[-3:]:  # Last 3 messages for context
-        role = "User" if msg.role == "user" else "Assistant"
-        context += f"{role}: {msg.content}\n"
-    return context
+def build_conversation_messages(history: list[Message]) -> list:
+    """Convert chat history to LangChain message objects for proper multi-turn continuity.
+
+    Returns the last 8 messages (4 full exchanges) so the model retains enough
+    context to answer follow-up questions about the same topic without being
+    explicitly re-told the location or subject.
+    """
+    msgs = []
+    for msg in history[-8:]:  # 8 messages = 4 full exchanges
+        if msg.role == "user":
+            msgs.append(HumanMessage(content=msg.content))
+        elif msg.role == "assistant":
+            msgs.append(AIMessage(content=msg.content))
+    return msgs
 
 
 def extract_location_from_query(question: str) -> dict:
@@ -458,6 +464,22 @@ def extract_location_from_query(question: str) -> dict:
             return {'type': 'state', 'name': state}
     
     return {'type': None, 'name': None}
+
+
+def extract_topic_from_history(history: list[Message]) -> dict:
+    """Resolve the active topic/location from conversation history when the
+    current message is a follow-up that doesn't explicitly name a location
+    (e.g. 'What policies worked there?' after discussing California).
+
+    Walks backwards through the last 8 messages looking for the first
+    user or assistant turn that contains a recognisable location.
+    """
+    for msg in reversed(history[-8:]):
+        if msg.role in ("user", "assistant"):
+            loc = extract_location_from_query(msg.content)
+            if loc["type"] is not None:
+                return loc
+    return {"type": None, "name": None}
 
 
 def extract_states_from_query(question: str) -> list:
@@ -546,8 +568,8 @@ async def chat(request: ChatRequest):
         raise HTTPException(status_code=500, detail="Graph not loaded. Check data files.")
     
     question = request.message
-    conversation_context = build_conversation_context(request.conversation_history)
-    
+    history_messages = build_conversation_messages(request.conversation_history)
+
     logger.info(f"Chat request: {question}")
     
     try:
@@ -558,8 +580,22 @@ async def chat(request: ChatRequest):
         # Check if this is a data/comparison query
         data_keywords = ['compare', 'difference', 'data', 'statistics', 'tell me about', 'what is', 'how']
         is_data_query = any(keyword in question.lower() for keyword in data_keywords)
-        
-        # If casual conversation, respond naturally without forcing data
+
+        # Check if this is a policy / intervention query
+        policy_keywords = [
+            'policy', 'policies', 'reform', 'legislation', 'law', 'program', 'initiative',
+            'intervention', 'fix', 'improve', 'tackle', 'address', 'solve', 'solution',
+            'recommendation', 'strategy', 'what worked', 'what has been tried', 'history',
+            'past decisions', 'proven', 'effective', 'reduce inequality', 'reduce poverty',
+        ]
+        is_policy_query = any(keyword in question.lower() for keyword in policy_keywords)
+        # Carry forward from history: if a recent exchange touched policy, keep the flag set
+        # so follow-up questions ("What about education?") still pull policy evidence.
+        if not is_policy_query and request.conversation_history:
+            for _msg in request.conversation_history[-6:]:
+                if any(kw in _msg.content.lower() for kw in policy_keywords):
+                    is_policy_query = True
+                    break
         if is_casual and not is_data_query:
             prompt_text = f"""You are a friendly wealth inequality expert AI assistant. 
 Respond warmly and naturally to this casual greeting. Keep it brief (1-2 sentences).
@@ -575,7 +611,7 @@ Response:"""
                 model="gpt-3.5-turbo", 
                 max_tokens=150
             )
-            response = llm.invoke(prompt_text)
+            response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
             reply = response.content if hasattr(response, 'content') else str(response)
             
             return {
@@ -612,12 +648,43 @@ State 2: {state2}
 - Education (Bachelor+): {profile2.get('demographics', {}).get('education_bachelor_and_above', 'N/A')}%
 - Unemployment: {list(profile2.get('economics', {}).get('indicators', {}).get('unemployment_rate', {}).get('data', {}).values())[-1] if profile2.get('economics', {}).get('indicators', {}).get('unemployment_rate', {}).get('data') else 'N/A'}%
 """
-                
-                prompt_text = f"""You are a wealth inequality and economics expert. 
+
+                # Inject policy history for both states when relevant
+                policy_history_section = ""
+                if is_policy_query:
+                    hist1 = get_policy_history_context(
+                        region=state1,
+                        current_metrics={"poverty_rate": profile1.get('demographics', {}).get('poverty_rate')},
+                        max_policies=3,
+                    )
+                    hist2 = get_policy_history_context(
+                        region=state2,
+                        current_metrics={"poverty_rate": profile2.get('demographics', {}).get('poverty_rate')},
+                        max_policies=3,
+                    )
+                    if hist1 or hist2:
+                        policy_history_section = ""
+                        if hist1:
+                            policy_history_section += f"\nHistorical Policy Evidence — {state1}:\n{hist1}\n"
+                        if hist2:
+                            policy_history_section += f"\nHistorical Policy Evidence — {state2}:\n{hist2}\n"
+
+                if policy_history_section:
+                    prompt_text = f"""You are a wealth inequality and economics expert with deep knowledge of regional policy history.
+Compare the two states using the government data AND their documented policy histories below.
+Highlight differences in what each state tried and what the outcomes were. Be conversational. (3-4 sentences)
+
+Government Data from Census Bureau, BLS, and Federal Reserve:
+{data_context}
+{policy_history_section}
+User Question: {question}
+
+Evidence-Based Comparison:"""
+                    max_tokens = 450
+                else:
+                    prompt_text = f"""You are a wealth inequality and economics expert. 
 Based on the government data below, provide a natural, articulate comparison answering the user's question.
 Focus on the key differences that matter. Be conversational, not just a list. (2-3 sentences max)
-
-{conversation_context}
 
 Government Data from Census Bureau, BLS, and Federal Reserve:
 {data_context}
@@ -625,25 +692,31 @@ Government Data from Census Bureau, BLS, and Federal Reserve:
 User Question: {question}
 
 Articulate Comparison:"""
+                    max_tokens = 250
                 
                 llm = ChatOpenAI(
                     temperature=0.3, 
                     api_key=openai_api_key, 
                     model="gpt-3.5-turbo", 
-                    max_tokens=250
+                    max_tokens=max_tokens
                 )
-                response = llm.invoke(prompt_text)
+                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 return {
                     "reply": reply,
                     "source": "enriched_comparison",
                     "states": [state1, state2],
-                    "query_type": "state_comparison"
+                    "query_type": "state_policy_comparison" if is_policy_query else "state_comparison",
+                    "policy_history_used": bool(policy_history_section),
                 }
         
         # Handle single state queries
         location_info = extract_location_from_query(question)
+        # If the current message has no explicit location, inherit the active topic
+        # from conversation history so follow-up questions resolve correctly.
+        if location_info['type'] is None and request.conversation_history:
+            location_info = extract_topic_from_history(request.conversation_history)
         if location_info['type'] == 'state':
             location = location_info['name']
             state_profile = load_enriched_state_profile(location)
@@ -664,13 +737,41 @@ State: {location}
 
 Source: Census Bureau (demographics), Bureau of Labor Statistics (employment), Federal Reserve (economic indicators)
 """
-                
+
+                # Inject historical policy evidence for policy-related questions
+                policy_history_section = ""
+                if is_policy_query:
+                    current_metrics = {
+                        "poverty_rate": demo.get("poverty_rate"),
+                        "median_household_income": demo.get("median_household_income"),
+                    }
+                    policy_history_section = get_policy_history_context(
+                        region=location,
+                        current_metrics=current_metrics,
+                        max_policies=4,
+                    )
+
                 # Use LLM to articulate the data naturally
-                prompt_text = f"""You are a wealth and economics expert analyst.
+                if policy_history_section:
+                    prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
+Use the government data AND the historical policy evidence below to answer the user's question about {location}.
+Ground your response in what was actually tried in this region and what the documented outcomes were.
+Be conversational and evidence-based. (3-4 sentences)
+
+Government Data:
+{data_context}
+
+Historical Policy Evidence for {location}:
+{policy_history_section}
+
+User Question: {question}
+
+Evidence-Based Analysis:"""
+                    max_tokens = 400
+                else:
+                    prompt_text = f"""You are a wealth and economics expert analyst.
 Use the government data below to naturally answer the user's question about {location}.
 Be conversational and insightful - articulate what the data means, don't just repeat numbers. (2-3 sentences)
-
-{conversation_context}
 
 Government Data:
 {data_context}
@@ -678,21 +779,23 @@ Government Data:
 User Question: {question}
 
 Natural Analysis:"""
+                    max_tokens = 250
                 
                 llm = ChatOpenAI(
                     temperature=0.3, 
                     api_key=openai_api_key, 
                     model="gpt-3.5-turbo", 
-                    max_tokens=250
+                    max_tokens=max_tokens
                 )
-                response = llm.invoke(prompt_text)
+                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 return {
                     "reply": reply,
                     "source": "enriched_analysis",
                     "location": location,
-                    "query_type": "state_analysis"
+                    "query_type": "state_policy_analysis" if is_policy_query else "state_analysis",
+                    "policy_history_used": bool(policy_history_section),
                 }
         
         # Handle city/metro area queries (load from S3)
@@ -718,13 +821,41 @@ Employment Data:
 
 Source: Census Bureau ACS (demographics), BLS LAUS (employment)
 """
-                
+
+                # Inject historical policy evidence for policy-related questions
+                policy_history_section = ""
+                if is_policy_query:
+                    current_metrics = {
+                        "poverty_rate": demo.get("poverty_rate"),
+                        "median_household_income": demo.get("median_household_income"),
+                    }
+                    policy_history_section = get_policy_history_context(
+                        region=city_name,
+                        current_metrics=current_metrics,
+                        max_policies=4,
+                    )
+
                 # Use LLM to articulate city data
-                prompt_text = f"""You are a wealth and economics expert analyst.
+                if policy_history_section:
+                    prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
+Use the metro area data AND the historical policy evidence below to answer the user's question about {city_name}.
+Ground your response in what was actually tried in this region and what the documented outcomes were.
+Be conversational and evidence-based. (3-4 sentences)
+
+Government Data:
+{data_context}
+
+Historical Policy Evidence for {city_name}:
+{policy_history_section}
+
+User Question: {question}
+
+Evidence-Based Analysis:"""
+                    max_tokens = 400
+                else:
+                    prompt_text = f"""You are a wealth and economics expert analyst.
 Use the government metro area data below to naturally answer the user's question about {city_name}.
 Be conversational and insightful - explain what the data tells us about this metro area. (2-3 sentences)
-
-{conversation_context}
 
 Government Data:
 {data_context}
@@ -732,14 +863,15 @@ Government Data:
 User Question: {question}
 
 Natural Analysis:"""
+                    max_tokens = 250
                 
                 llm = ChatOpenAI(
                     temperature=0.3, 
                     api_key=openai_api_key, 
                     model="gpt-3.5-turbo", 
-                    max_tokens=250
+                    max_tokens=max_tokens
                 )
-                response = llm.invoke(prompt_text)
+                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 return {
@@ -747,7 +879,8 @@ Natural Analysis:"""
                     "source": "city_metro_data_s3",
                     "city": city_name,
                     "metro_area": metro_area,
-                    "query_type": "city_analysis"
+                    "query_type": "city_policy_analysis" if is_policy_query else "city_analysis",
+                    "policy_history_used": bool(policy_history_section),
                 }
         
         # For general, non-location-specific questions, use semantic search + LLM
@@ -756,8 +889,6 @@ Natural Analysis:"""
         prompt_text = f"""You are a wealth inequality and economics expert.
 Answer this question using your knowledge and the context provided.
 Be conversational and direct. (2-3 sentences max)
-
-{conversation_context}
 
 Context: {context}
 
@@ -769,9 +900,9 @@ Answer:"""
             temperature=0.3, 
             api_key=openai_api_key, 
             model="gpt-3.5-turbo", 
-            max_tokens=200
+            max_tokens=300
         )
-        response = llm.invoke(prompt_text)
+        response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
         reply = response.content if hasattr(response, 'content') else str(response)
         
         return {
@@ -851,6 +982,51 @@ async def get_policy(request: PolicyRequest):
     except Exception as e:
         logger.error(f"Policy recommendation error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+# --- Policy History Endpoints ---
+@app.get("/api/policy-history")
+async def list_policy_regions():
+    """List all regions with documented policy history."""
+    return {"regions": get_available_regions()}
+
+
+@app.get("/api/policy-history/{region}")
+async def get_policy_history(
+    region: str,
+    category: Optional[str] = None,
+    poverty_rate: Optional[float] = None,
+    gini_coefficient: Optional[float] = None,
+    median_household_income: Optional[float] = None,
+):
+    """Return documented historical policy evidence for a US region.
+
+    Pass optional economic metrics to receive evidence-based synthesis
+    that connects historical outcomes to the region's current conditions.
+    """
+    try:
+        current_metrics = {}
+        if poverty_rate is not None:
+            current_metrics["poverty_rate"] = poverty_rate
+        if gini_coefficient is not None:
+            current_metrics["gini_coefficient"] = gini_coefficient
+        if median_household_income is not None:
+            current_metrics["median_household_income"] = median_household_income
+
+        brief = get_policy_brief_for_api(
+            region=region,
+            category=category,
+            current_metrics=current_metrics or None,
+        )
+        if "error" in brief:
+            raise HTTPException(status_code=404, detail=brief["error"])
+        return brief
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Policy history error: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 # --- Supabase Direct Query Endpoints ---
 @app.get("/api/wealth-data")
