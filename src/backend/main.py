@@ -18,7 +18,14 @@ from dotenv import load_dotenv
 from graph_rag import get_graph_rag_context
 from vector_embeddings import VectorStore
 from trend_analysis import TrendAnalyzer, analyze_wealth_gap_trends
-from policy_recommendations import get_policy_recommendations_for_region
+from policy_recommendations import (
+    get_policy_recommendations_for_region,
+    reload_policy_database,
+    update_policy_database,
+    get_policy_database,
+    get_policy_database_metadata,
+)
+from conversation_context_manager import ConversationContextManager, TopicCategory
 from regional_policy_history import get_policy_history_context, get_policy_brief_for_api, get_available_regions
 from government_api import get_local_economic_indicators, clear_api_cache
 from s3_data_loader import s3_loader
@@ -201,6 +208,10 @@ Your responses should:
 ENRICHMENT_DATA = load_enrichment_knowledge_base()
 ENHANCED_SYSTEM_PROMPT = get_enhanced_system_prompt()
 logger.info(f"Enrichment knowledge base status: {ENRICHMENT_DATA['status']}")
+
+# Initialize conversation context manager for better topic/context switching
+CONVERSATION_MANAGER = ConversationContextManager()
+logger.info("✓ Conversation context manager initialized")
 
 # --- Data Loading (from Supabase or CSV fallback) ---
 from supabase_db import get_db
@@ -387,6 +398,7 @@ class Message(BaseModel):
 
 class ChatRequest(BaseModel):
     message: str
+    conversation_id: str = "default"  # Track conversation for context continuity
     conversation_history: list[Message] = []  # Optional conversation context
     
 class TrendRequest(BaseModel):
@@ -563,7 +575,7 @@ def get_government_data_context(query: str, data_type: str) -> str:
 
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
-    """Smart conversation-aware chat with natural language + enriched government data"""
+    """Smart conversation-aware chat with natural language + enriched government data + context management"""
     if not graph:
         raise HTTPException(status_code=500, detail="Graph not loaded. Check data files.")
     
@@ -571,6 +583,29 @@ async def chat(request: ChatRequest):
     history_messages = build_conversation_messages(request.conversation_history)
 
     logger.info(f"Chat request: {question}")
+    
+    # ============= NEW: Conversation Context Management =============
+    # Track conversation context to improve topic switching and understanding
+    context = CONVERSATION_MANAGER.get_or_create_context(request.conversation_id)
+    topic, topic_confidence = CONVERSATION_MANAGER.detect_topic(question)
+    region_switched = CONVERSATION_MANAGER.detect_region_switch(question, context)
+    
+    # Log topic detection for debugging
+    logger.info(f"Detected topic: {topic.value} (confidence: {topic_confidence:.2f})")
+    if region_switched:
+        logger.info(f"Region switch detected from {context.current_region}")
+    
+    # Add this exchange to context
+    context.add_message(role="user", content=question, topic=topic.value)
+    
+    # Build context-aware system prompt that helps LLM understand topic switches
+    context_aware_preamble = ""
+    if region_switched and context.current_region:
+        context_aware_preamble = f"Note: User is switching from discussing {context.current_region} to potentially a different region/topic. Be helpful with the topic switch.\n"
+    elif context.current_region:
+        context_aware_preamble = f"Conversation context: Currently discussing {context.current_region}. Use this context if the user references 'there' or similar pronouns.\n"
+    
+    # ============= END: Conversation Context Management =============
     
     try:
         # Check if this is a casual conversation (greeting, general chat)
@@ -613,6 +648,9 @@ Response:"""
             )
             response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
             reply = response.content if hasattr(response, 'content') else str(response)
+            
+            # Track response in conversation context
+            context.add_message(role="assistant", content=reply, topic=topic.value)
             
             return {
                 "reply": reply,
@@ -703,6 +741,12 @@ Articulate Comparison:"""
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
+                # Track comparison in conversation context
+                context.add_message(role="assistant", content=reply, topic=topic.value)
+                if len(states_in_query) >= 2:
+                    # Update region if user is comparing states (track primary one)
+                    context.current_region = states_in_query[0]
+                
                 return {
                     "reply": reply,
                     "source": "enriched_comparison",
@@ -790,6 +834,10 @@ Natural Analysis:"""
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
+                # Track in conversation context
+                context.add_message(role="assistant", content=reply, topic=topic.value)
+                context.current_region = location  # Update current region for follow-up questions
+                
                 return {
                     "reply": reply,
                     "source": "enriched_analysis",
@@ -874,6 +922,11 @@ Natural Analysis:"""
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
+                # Track in conversation context
+                context.add_message(role="assistant", content=reply, topic=topic.value)
+                if city_name:
+                    context.current_region = city_name
+                
                 return {
                     "reply": reply,
                     "source": "city_metro_data_s3",
@@ -884,13 +937,13 @@ Natural Analysis:"""
                 }
         
         # For general, non-location-specific questions, use semantic search + LLM
-        context = get_graph_rag_context(question, graph)
+        graph_rag_context = get_graph_rag_context(question, graph)
         
         prompt_text = f"""You are a wealth inequality and economics expert.
 Answer this question using your knowledge and the context provided.
 Be conversational and direct. (2-3 sentences max)
 
-Context: {context}
+Context: {graph_rag_context}
 
 Question: {question}
 
@@ -904,6 +957,9 @@ Answer:"""
         )
         response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
         reply = response.content if hasattr(response, 'content') else str(response)
+        
+        # Track general question in conversation context
+        context.add_message(role="assistant", content=reply, topic=topic.value)
         
         return {
             "reply": reply,
@@ -955,30 +1011,64 @@ async def analyze_trends(request: TrendRequest):
 # --- Policy Recommendations Endpoint ---
 @app.post("/api/policy-recommendations")
 async def get_policy(request: PolicyRequest):
-    """Generate evidence-based policy recommendations"""
+    """Generate LLM-backed, data-driven policy recommendations using real government metrics"""
     try:
+        # Pull enriched profile for richer demographic context if available
+        enriched_demographics = {}
+        enriched_profile = load_enriched_state_profile(request.region) if request.region else None
+        if enriched_profile:
+            demo = enriched_profile.get('demographics', {})
+            enriched_demographics = {
+                'median_household_income': demo.get('median_household_income'),
+                'education_bachelor_plus': demo.get('education_bachelor_and_above'),
+                'median_age': demo.get('median_age'),
+                'population': demo.get('population'),
+            }
+
+        current_metrics = {
+            'gini_coefficient': request.gini_coefficient,
+            'poverty_rate': request.poverty_rate,
+            'median_household_income': enriched_demographics.get('median_household_income'),
+        }
+
+        # Fetch historical policy evidence from S3 to ground the LLM
+        policy_history = get_policy_history_context(
+            region=request.region,
+            current_metrics=current_metrics,
+            max_policies=4,
+        )
+
         region_data = {
             'gini_coefficient': request.gini_coefficient,
             'top_1_percent_share': request.top_1_percent_share,
             'bottom_50_percent_share': request.bottom_50_percent_share,
             'unemployment_rate': request.unemployment_rate,
             'poverty_rate': request.poverty_rate,
-            'region': request.region
+            'region': request.region,
+            'demographics': enriched_demographics,
         }
-        
-        recommendations = get_policy_recommendations_for_region(region_data)
-        
+
+        recommendations = get_policy_recommendations_for_region(
+            region_data=region_data,
+            policy_history_context=policy_history,
+            openai_api_key=openai_api_key,
+        )
+
         return {
             "region": request.region,
             "economic_indicators": {
                 "gini_coefficient": request.gini_coefficient,
                 "top_1_percent_share": request.top_1_percent_share,
-                "poverty_rate": request.poverty_rate
+                "bottom_50_percent_share": request.bottom_50_percent_share,
+                "unemployment_rate": request.unemployment_rate,
+                "poverty_rate": request.poverty_rate,
             },
             "recommendations": recommendations,
-            "count": len(recommendations)
+            "count": len(recommendations),
+            "generation_method": "llm_data_driven",
+            "data_sources": ["Census Bureau", "BLS", "Federal Reserve", "S3 Policy History"],
         }
-        
+
     except Exception as e:
         logger.error(f"Policy recommendation error: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -989,6 +1079,76 @@ async def get_policy(request: PolicyRequest):
 async def list_policy_regions():
     """List all regions with documented policy history."""
     return {"regions": get_available_regions()}
+
+
+# --- Policy Database Admin Endpoints ---
+@app.get("/api/policy-database")
+async def list_policy_database():
+    """
+    Return the full policy catalog currently loaded in memory.
+    The catalog is sourced from S3 and refreshed hourly.
+    """
+    db = get_policy_database()
+    meta = get_policy_database_metadata()
+    return {
+        "policies": db,
+        "count": len(db),
+        "metadata": meta,
+        "s3_key": "s3://mindthegap-gov-data/government-data/policy-database/policy_database.json",
+    }
+
+
+@app.post("/api/policy-database/reload", dependencies=[Depends(_require_admin)])
+async def reload_policy_db():
+    """
+    Force-reload the policy catalog from S3 immediately, bypassing the 1-hour TTL.
+    Use after uploading new policies to S3 to pick them up without restarting the server.
+    """
+    success = reload_policy_database()
+    if success:
+        meta = get_policy_database_metadata()
+        return {
+            "status": "reloaded",
+            "policy_count": len(get_policy_database()),
+            "metadata": meta,
+        }
+    raise HTTPException(status_code=503, detail="Reload from S3 failed; check server logs")
+
+
+@app.put("/api/policy-database", dependencies=[Depends(_require_admin)])
+async def update_policy_db(payload: dict):
+    """
+    Upload an updated policy catalog to S3 and refresh the in-memory cache.
+
+    Expected body:
+      {
+        \"policy_database\": {
+          \"<key>\": {
+            \"title\": \"...\",
+            \"category\": \"Education & Workforce Development\",
+            \"description\": \"...\",
+            \"target_populations\": [...],
+            \"expected_impact\": \"...\",
+            \"implementation_difficulty\": \"Moderate\",
+            \"cost_estimate\": \"High\",
+            \"historical_examples\": [...],
+            \"success_metrics\": [...],
+            \"prerequisites\": []
+          }
+        },
+        \"metadata\": { \"version\": \"1.1\", \"last_updated\": \"YYYY-MM-DD\", \"description\": \"...\" }
+      }
+    """
+    if "policy_database" not in payload:
+        raise HTTPException(status_code=400, detail="payload must contain 'policy_database' key")
+    success = update_policy_database(payload)
+    if success:
+        return {
+            "status": "updated",
+            "policy_count": len(get_policy_database()),
+            "metadata": get_policy_database_metadata(),
+        }
+    raise HTTPException(status_code=503, detail="S3 upload failed; check server logs")
 
 
 @app.get("/api/policy-history/{region}")

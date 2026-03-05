@@ -4,9 +4,24 @@ Generates evidence-based policy recommendations based on wealth disparity data a
 """
 
 from typing import Dict, List, Any, Optional
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 import json
+import os
+import logging
+import threading
+
+import boto3
+from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
+
+_ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
+load_dotenv(_ENV_PATH)
+
+_S3_BUCKET      = "mindthegap-gov-data"
+_S3_KEY         = "government-data/policy-database/policy_database.json"
+_LOCAL_FALLBACK = os.path.join(os.path.dirname(__file__), "policy_database.json")
 
 
 class PolicyCategory(Enum):
@@ -264,13 +279,316 @@ POLICY_DATABASE = {
             "Speculative real estate transactions decrease",
             "Public revenue from land tax supports community investment"
         ]
+    ),
+    
+    'individual_tax_relief': PolicyRecommendation(
+        title="Middle-Income Tax Relief & Refundable Credits",
+        category=PolicyCategory.TAXATION,
+        description="Expand tax refundable credits and reduce tax burden for middle-income households (earning $50K-$150K annually) to increase take-home pay.",
+        target_populations=["Middle-income households ($50K-$150K)", "Working families"],
+        expected_impact="Increase disposable income by $2,000-$5,000 annually per household, boost consumer spending",
+        implementation_difficulty="Easy",
+        cost_estimate="Moderate",
+        historical_examples=[
+            "2017 US Tax Cuts and Jobs Act increased take-home pay for middle-income earners",
+            "Canada's Canada Workers Benefit expanded credits by $1,400+ per eligible worker",
+            "UK Child Tax Credit increases disposable income for families by £2,300 annually"
+        ],
+        success_metrics=[
+            "Average household take-home income increases by $3,000+ annually",
+            "Consumer spending increases by 5-8%",
+            "Poverty rate decreases by 8-12%",
+            "Emergency savings for middle-income households increase 25%+"
+        ]
+    ),
+    
+    'student_debt_relief': PolicyRecommendation(
+        title="Student Loan Forgiveness & Interest Rate Relief",
+        category=PolicyCategory.INCOME_SUPPORT,
+        description="Implement targeted student loan forgiveness (up to $50K for public service workers) and reduce interest rates on remaining federal student loans to 1-2%.",
+        target_populations=["Student loan borrowers (~45M Americans)", "Public service workers", "Recent graduates"],
+        expected_impact="Free up $300-$500 monthly household cash flow, enable 15M households to buy homes/start businesses",
+        implementation_difficulty="Moderate",
+        cost_estimate="High",
+        historical_examples=[
+            "Income-Based Repayment plans cap payments at 20% of discretionary income",
+            "Public Service Loan Forgiveness program forgives debt after 10 years of service",
+            "Australia's income-contingent loan scheme adapts repayment to earnings capacity",
+            "Germany eliminated tuition fees and reduced student debt burden by 60%+"
+        ],
+        success_metrics=[
+            "Average monthly household savings of $300-$500 from reduced payments",
+            "Home purchase rate for young adults increases 20%",
+            "Small business formation by millennials increases 35%",
+            "Cumulative household wealth increases $20K+ per borrower"
+        ]
+    ),
+    
+    'child_dependent_credits': PolicyRecommendation(
+        title="Enhanced Child & Dependent Tax Credits",
+        category=PolicyCategory.INCOME_SUPPORT,
+        description="Expand Child Tax Credit to $3,500+ per child (up from $2,000) and make fully refundable for all households including those with zero tax liability.",
+        target_populations=["Families with children (60M+ children)", "Low-income parents", "Single parents"],
+        expected_impact="Increase annual child tax credit payments to $35K+ families by $3,000-$5,000",
+        implementation_difficulty="Easy",
+        cost_estimate="High",
+        historical_examples=[
+            "2021 American Rescue Plan expanded CTC to $3,600, reducing child poverty by 25%+",
+            "Canadian Child Benefit provides $6,400+ per child in low-income families",
+            "UK Child Benefit provides £21+ per week per child to all families",
+            "Australia's Family Tax Benefit payments reach $4,100+ per family annually"
+        ],
+        success_metrics=[
+            "Child poverty rate decreases by 30%",
+            "Annual income for families with children increases $4,000+",
+            "Educational outcomes and health metrics improve for low-income children",
+            "Parental workforce participation increases 8%"
+        ]
+    ),
+    
+    'healthcare_savings_expansion': PolicyRecommendation(
+        title="Health Savings Account Expansion & Tax Incentives",
+        category=PolicyCategory.HEALTHCARE,
+        description="Expand HSA contribution limits to $10,000+ and allow use for broader medical expenses (insurance premiums, childcare with health component, fitness).",
+        target_populations=["Middle and upper-middle income households ($75K-$200K)", "Self-employed individuals"],
+        expected_impact="Save $2,000-$3,000 annually in taxes, accumulate tax-free medical savings",
+        implementation_difficulty="Easy",
+        cost_estimate="Low",
+        historical_examples=[
+            "Current HSA limits ($4,150 individual, $8,300 family) save $1,000-$2,000 in taxes",
+            "Singapore's healthcare savings accounts (CPF) reduce per-capita costs while building savings",
+            "Switzerland's HSA-like system with tax deductions enables $100K+ in lifetime medical savings"
+        ],
+        success_metrics=[
+            "Healthcare cost burden decreases 15-20% for HSA participants",
+            "Personal health savings accumulate $50K+ per household over 20 years",
+            "Healthcare expenditure as % of household income decreases 3-5%",
+            "Preventive care participation rates increase 30%"
+        ]
+    ),
+    
+    'consumer_debt_relief': PolicyRecommendation(
+        title="Interest Rate Caps & Consumer Debt Relief",
+        category=PolicyCategory.INCOME_SUPPORT,
+        description="Cap interest rates at 15-20% for credit cards and personal loans, implement debt restructuring programs for households over $10K in unsecured debt.",
+        target_populations=["Low-income households with credit card debt (~40M households)", "Subprime borrowers"],
+        expected_impact="Save $2,000-$5,000 annually on debt payments, avoid predatory lending, increase household financial stability",
+        implementation_difficulty="Moderate",
+        cost_estimate="Low",
+        historical_examples=[
+            "CARD Act (2009) capped credit card rate increases and improved transparency",
+            "Consumer Credit Acts in multiple countries cap rates at 16-25%",
+            "New Hampshire's payday loan rate caps reduced defaults by 35%",
+            "UK caps high-cost short-term credit at 0.8% daily (effective 29.2% annual)"
+        ],
+        success_metrics=[
+            "Average household credit card savings of $3,000 annually",
+            "Default rates on high-cost debt decrease 40%+",
+            "Bankruptcy filings from medical/debt causes decrease 30%",
+            "Household emergency savings increase as debt service decreases"
+        ]
+    ),
+    
+    'homeowner_relief': PolicyRecommendation(
+        title="Homeowner Tax Relief & Mortgage Assistance",
+        category=PolicyCategory.HOUSING,
+        description="Increase deductibility of mortgage interest, property taxes; expand first-time homebuyer tax credits to $20K and establish hardship refinancing programs.",
+        target_populations=["Homeowners (~82M households)", "First-time homebuyers", "Underwater mortgages"],
+        expected_impact="Increase home affordability, enable 5M+ additional families to qualify for mortgages, reduce foreclosures",
+        implementation_difficulty="Moderate",
+        cost_estimate="Moderate",
+        historical_examples=[
+            "Mortgage Interest Deduction saved homeowners $100B+ annually on federal taxes",
+            "First-time Homebuyer Credit (2008-2010) enabled 4.5M+ home purchases",
+            "Home Affordable Modification Program reduced monthly payments by average $500+",
+            "Australia's First Home Super Saver Scheme enables tax-advantaged saving for down payments"
+        ],
+        success_metrics=[
+            "Homeownership rate increases 3-5 percentage points",
+            "First-time homebuyer purchases increase 25-30%",
+            "Foreclosure rates decrease 40%-50%",
+            "Home equity accumulation accelerates ($50K+ over 10 years)"
+        ]
     )
 }
 
 
+# ─────────────────────────────────────────────────────────────────────────────
+# S3 LOADER  —  thread-safe, TTL-cached, falls back to local JSON then to
+#               the in-code POLICY_DATABASE when both are unreachable.
+# ─────────────────────────────────────────────────────────────────────────────
+
+class PolicyDatabaseLoader:
+    """
+    Loads the policy catalog from S3 so it can be updated without redeployment.
+
+    S3 key   : s3://mindthegap-gov-data/government-data/policy-database/policy_database.json
+    Schema   : { "policy_database": { "<key>": { policy fields }, ... },
+                 "metadata": { "version": "...", "last_updated": "..." } }
+
+    Call reload_policy_database() to force an immediate refresh from S3.
+    Call update_policy_database(payload) to push new data to S3 and refresh.
+    """
+
+    CACHE_TTL = 3600  # seconds
+
+    def __init__(self):
+        self._lock      = threading.Lock()
+        self._db: Dict[str, Dict[str, Any]] = {}
+        self._meta: Dict[str, Any] = {}
+        self._loaded_at: Optional[datetime] = None
+        self._s3 = boto3.client(
+            "s3",
+            region_name=os.getenv("AWS_REGION", "us-east-2"),
+            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
+            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
+        )
+
+    def _is_stale(self) -> bool:
+        if self._loaded_at is None:
+            return True
+        return datetime.now() - self._loaded_at > timedelta(seconds=self.CACHE_TTL)
+
+    def _parse_payload(self, payload: dict) -> None:
+        self._db       = payload.get("policy_database", {})
+        self._meta     = payload.get("metadata", {})
+        self._loaded_at = datetime.now()
+
+    def _load_from_s3(self) -> bool:
+        try:
+            obj = self._s3.get_object(Bucket=_S3_BUCKET, Key=_S3_KEY)
+            payload = json.loads(obj["Body"].read().decode("utf-8"))
+            self._parse_payload(payload)
+            logger.info(
+                f"✓ PolicyDatabaseLoader: loaded {len(self._db)} policies from S3 "
+                f"(v{self._meta.get('version', '?')})"
+            )
+            return True
+        except Exception as exc:
+            logger.warning(f"PolicyDatabaseLoader: S3 load failed — {exc}")
+            return False
+
+    def _load_from_local(self) -> bool:
+        try:
+            with open(_LOCAL_FALLBACK, encoding="utf-8") as f:
+                payload = json.load(f)
+            self._parse_payload(payload)
+            logger.info(
+                f"✓ PolicyDatabaseLoader: loaded {len(self._db)} policies from local fallback"
+            )
+            return True
+        except Exception as exc:
+            logger.warning(f"PolicyDatabaseLoader: local fallback failed — {exc}")
+            return False
+
+    def _load_from_code(self) -> None:
+        """Last-resort: convert in-code POLICY_DATABASE objects to plain dicts."""
+        self._db = {
+            key: policy.to_dict()
+            for key, policy in POLICY_DATABASE.items()
+        }
+        # Patch in the dict key as 'key' field for reference
+        for key, rec in self._db.items():
+            rec.setdefault("key", key)
+        self._loaded_at = datetime.now()
+        logger.info(
+            f"✓ PolicyDatabaseLoader: using {len(self._db)} in-code policies as fallback"
+        )
+
+    def _ensure_loaded(self) -> None:
+        if not self._is_stale():
+            return
+        with self._lock:
+            if not self._is_stale():
+                return
+            if not self._load_from_s3():
+                if not self._load_from_local():
+                    self._load_from_code()
+
+    def get_database(self) -> Dict[str, Dict[str, Any]]:
+        self._ensure_loaded()
+        return self._db
+
+    def get_metadata(self) -> Dict[str, Any]:
+        self._ensure_loaded()
+        return self._meta
+
+    def reload(self) -> bool:
+        """Force reload from S3 regardless of TTL. Returns True on success."""
+        self._loaded_at = None
+        return self._load_from_s3() or self._load_from_local()
+
+    def save_to_s3(self, payload: dict) -> bool:
+        """
+        Persist an updated policy payload to S3 AND refresh the in-memory cache.
+        payload schema:
+          {
+            "policy_database": { "<key>": { policy fields }, ... },
+            "metadata": { "version": "1.1", "last_updated": "YYYY-MM-DD", "description": "..." }
+          }
+        """
+        try:
+            body = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
+            self._s3.put_object(
+                Bucket=_S3_BUCKET,
+                Key=_S3_KEY,
+                Body=body,
+                ContentType="application/json",
+            )
+            self._parse_payload(payload)
+            logger.info(f"✓ PolicyDatabaseLoader: saved {len(self._db)} policies to S3")
+            return True
+        except Exception as exc:
+            logger.error(f"PolicyDatabaseLoader: S3 save failed — {exc}")
+            return False
+
+
+# Module-level singleton
+_policy_loader = PolicyDatabaseLoader()
+
+
+def _get_policy_field(policy, field: str, default=None):
+    """Uniform access for both plain-dict (S3) and PolicyRecommendation (code) objects."""
+    if isinstance(policy, dict):
+        return policy.get(field, default)
+    # PolicyRecommendation object
+    val = getattr(policy, field, default)
+    if field == "category" and hasattr(val, "value"):
+        return val.value
+    return val
+
+
+def _build_policy_reference_context() -> str:
+    """
+    Serialize the policy catalog (loaded from S3) into a compact reference string
+    for the LLM prompt.  The LLM cites real policy names, historical examples, and
+    success metrics from this to ground its output in proven evidence.
+    """
+    db = _policy_loader.get_database()
+    lines = ["=== Policy Reference Library ==="]
+    for key, policy in db.items():
+        title       = _get_policy_field(policy, "title", key)
+        category    = _get_policy_field(policy, "category", "General")
+        description = _get_policy_field(policy, "description", "")
+        examples    = _get_policy_field(policy, "historical_examples", [])
+        metrics     = _get_policy_field(policy, "success_metrics", [])
+        targets     = _get_policy_field(policy, "target_populations", [])
+
+        lines.append(f"\n[{key}] {title} ({category})")
+        lines.append(f"  Description: {str(description)[:120]}...")
+        lines.append(f"  Target: {', '.join(targets[:2])}")
+        lines.append(f"  Examples: {examples[0] if examples else 'N/A'}")
+        lines.append(f"  Metrics: {metrics[0] if metrics else 'N/A'}")
+    return "\n".join(lines)
+
+
 class PolicyRecommendationEngine:
-    """Generates evidence-based policy recommendations"""
-    
+    """
+    LLM-backed policy recommendation engine.
+    Uses real government API metrics + POLICY_DATABASE reference + optional
+    regional history to generate specific, data-grounded recommendations.
+    """
+
     @staticmethod
     def get_recommendations_for_situation(
         gini_coefficient: float,
@@ -279,102 +597,156 @@ class PolicyRecommendationEngine:
         unemployment_rate: float,
         poverty_rate: float,
         demographics: Dict[str, Any] = None,
-        geographic_focus: str = None
+        geographic_focus: str = None,
+        policy_history_context: str = "",
+        openai_api_key: str = None,
     ) -> List[Dict[str, Any]]:
         """
-        Generate tailored policy recommendations based on economic situation
-        
-        Args:
-            gini_coefficient: Inequality measure (0-1)
-            top_1_percent_share: Wealth share of top 1%
-            bottom_50_percent_share: Wealth share of bottom 50%
-            unemployment_rate: Current unemployment rate
-            poverty_rate: Percentage of population below poverty line
-            demographics: Dictionary with demographic breakdowns
-            geographic_focus: Geographic area for context
-        
-        Returns:
-            Prioritized list of policy recommendations
+        Generate LLM-backed policy recommendations driven by real economic data.
+
+        The LLM receives:
+          - Actual government-sourced metrics for the region
+          - The full POLICY_DATABASE as a reference library to cite from
+          - Optional historical policy evidence from S3 (regional_policy_history)
+
+        Returns a list of structured recommendation dicts.
         """
-        recommendations = []
-        scores = {}
-        
-        # Score each policy based on the situation
-        
-        # High inequality calls for wealth redistribution and opportunity
-        if gini_coefficient > 0.50:
-            scores['education_investment'] = 9.0
-            scores['progressive_taxation'] = 8.5
-            scores['wealth_building'] = 8.0
-        
-        # High top 1% share
-        if top_1_percent_share > 35:
-            scores['progressive_taxation'] = 9.0
-            scores['wealth_building'] = 8.0
-            scores['land_value_tax'] = 7.5
-        
-        # High poverty/low bottom 50% share
-        if poverty_rate > 15 or bottom_50_percent_share < 3:
-            scores['earned_income_tax'] = 9.0
-            scores['minimum_wage'] = 8.5
-            scores['education_investment'] = 8.0
-            scores['housing_first'] = 7.5
-        
-        # High unemployment
-        if unemployment_rate > 5:
-            scores['education_investment'] = 8.5
-            scores['small_business'] = 8.0
-            scores['employment'] = 7.5
-        
-        # Demographic disparities
+        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            logger.warning("No OpenAI API key — falling back to heuristic scoring")
+            return PolicyRecommendationEngine._heuristic_fallback(
+                gini_coefficient, top_1_percent_share, bottom_50_percent_share,
+                unemployment_rate, poverty_rate
+            )
+
+        region_label = geographic_focus or "this region"
+        demo_str = ""
         if demographics:
-            if demographics.get('racial_wealth_gap', 0) > 10:
-                scores['housing'] = 8.5
-                scores['small_business'] = 8.5
-                scores['homeownership'] = 8.0
-            
-            if demographics.get('gender_wage_gap', 0) > 20:
-                scores['minimum_wage'] = 8.0
-                scores['education_investment'] = 7.5
-        
-        # Convert scores to recommendations
-        for policy_key, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
-            # Find matching policy in database
-            for db_key, policy in POLICY_DATABASE.items():
-                if db_key.replace('_', ' ') in policy_key or policy_key in db_key:
-                    rec = policy.to_dict()
-                    rec['priority_score'] = min(10.0, score)
-                    rec['rationale'] = PolicyRecommendationEngine._generate_rationale(
-                        policy_key, gini_coefficient, poverty_rate
-                    )
-                    recommendations.append(rec)
-                    break
-        
-        # Remove duplicates and sort by priority
-        seen = set()
-        unique_recs = []
-        for rec in recommendations:
-            if rec['title'] not in seen:
-                seen.add(rec['title'])
-                unique_recs.append(rec)
-        
-        return sorted(unique_recs, key=lambda x: x['priority_score'], reverse=True)[:5]
-    
+            demo_str = "\nAdditional demographic context:\n" + "\n".join(
+                f"  - {k.replace('_', ' ').title()}: {v}"
+                for k, v in demographics.items()
+                if v is not None
+            )
+
+        policy_ref = _build_policy_reference_context()
+
+        history_section = ""
+        if policy_history_context:
+            history_section = f"""
+=== Regional Policy History ===
+{policy_history_context}
+"""
+
+        prompt = f"""You are an expert economist and public policy analyst. \
+Generate exactly 5 tailored, evidence-based policy recommendations for {region_label} \
+based on the real government data below.
+
+For EACH recommendation you MUST output a JSON object (5 total, as a JSON array) with these fields:
+  - title        : concise policy name
+  - category     : one of Education, Income Support, Wealth Building, Employment, Taxation, Healthcare, Housing, Small Business, Individual Finance
+  - description  : 2-3 sentence explanation tailored to the specific metrics below
+  - target_populations : list of 2-3 groups most helped
+  - expected_impact    : specific projected outcome referencing the actual numbers (e.g. "reduce poverty rate from 14.2% toward 10%")
+  - implementation_difficulty : Easy | Moderate | Difficult
+  - cost_estimate   : Low | Moderate | High
+  - historical_examples : list of 1-2 real precedents (cite from the reference library if applicable)
+  - success_metrics : list of 2 measurable KPIs with numeric targets
+  - rationale : 1 sentence explaining why THIS metric combination makes this policy the priority
+  - priority_score : float 1-10 reflecting urgency given the data
+
+=== REAL GOVERNMENT DATA ({region_label}) ===
+  Gini Coefficient          : {gini_coefficient:.3f}  (national avg ~0.49)
+  Top 1% Wealth Share       : {top_1_percent_share:.1f}%
+  Bottom 50% Wealth Share   : {bottom_50_percent_share:.1f}%
+  Unemployment Rate         : {unemployment_rate:.1f}%
+  Poverty Rate              : {poverty_rate:.1f}%{demo_str}
+
+{policy_ref}
+{history_section}
+Return ONLY a valid JSON array of 5 objects. No markdown fences, no prose."""
+
+        try:
+            from langchain_openai import ChatOpenAI
+            from langchain_core.messages import HumanMessage
+
+            llm = ChatOpenAI(
+                temperature=0.3,
+                api_key=api_key,
+                model="gpt-3.5-turbo",
+                max_tokens=2000,
+            )
+            response = llm.invoke([HumanMessage(content=prompt)])
+            raw = response.content if hasattr(response, "content") else str(response)
+
+            # Strip accidental markdown fences
+            raw = raw.strip()
+            if raw.startswith("```"):
+                raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+
+            recommendations = json.loads(raw)
+            if not isinstance(recommendations, list):
+                raise ValueError("LLM did not return a JSON array")
+
+            logger.info(
+                f"✓ LLM generated {len(recommendations)} policy recommendations for {region_label}"
+            )
+            return recommendations
+
+        except Exception as exc:
+            logger.error(f"LLM policy generation failed ({exc}); using heuristic fallback")
+            return PolicyRecommendationEngine._heuristic_fallback(
+                gini_coefficient, top_1_percent_share, bottom_50_percent_share,
+                unemployment_rate, poverty_rate
+            )
+
     @staticmethod
-    def _generate_rationale(policy_key: str, gini: float, poverty: float) -> str:
-        """Generate context-specific rationale for a policy"""
-        rationales = {
-            '': f"Given the current Gini coefficient of {gini:.2f} and poverty rate of {poverty:.1f}%, ",
-        }
-        
-        base = f"Given the current situation (Gini: {gini:.2f}, Poverty: {poverty:.1f}%), "
-        
-        if gini > 0.50:
-            return base + "this policy addresses the high inequality by..."
-        elif poverty > 15:
-            return base + "this policy targets the high poverty rate by..."
-        else:
-            return base + "this policy promotes opportunity and inclusion by..."
+    def _heuristic_fallback(
+        gini_coefficient: float,
+        top_1_percent_share: float,
+        bottom_50_percent_share: float,
+        unemployment_rate: float,
+        poverty_rate: float,
+    ) -> List[Dict[str, Any]]:
+        """
+        Lightweight fallback used when the LLM is unavailable.
+        Returns top-scored policies from POLICY_DATABASE without LLM involvement.
+        """
+        scores: Dict[str, float] = {}
+
+        if gini_coefficient > 0.50:
+            scores.update({'education_investment': 9.0, 'progressive_taxation': 8.5, 'wealth_building': 8.0})
+        if top_1_percent_share > 35:
+            scores.update({'progressive_taxation': 9.0, 'land_value_tax': 7.5})
+        if poverty_rate > 15 or bottom_50_percent_share < 3:
+            scores.update({'earned_income_tax': 9.0, 'minimum_wage': 8.5, 'education_investment': 8.0, 'housing_first': 7.5})
+        if unemployment_rate > 5:
+            scores.update({'education_investment': 8.5, 'small_business': 8.0})
+        if not scores:
+            scores = {'education_investment': 7.0, 'minimum_wage': 7.0, 'earned_income_tax': 7.0}
+
+        # Use S3-loaded database (or code fallback)
+        db = _policy_loader.get_database()
+
+        results: List[Dict[str, Any]] = []
+        seen: set = set()
+        for policy_key, score in sorted(scores.items(), key=lambda x: x[1], reverse=True):
+            for db_key, policy in db.items():
+                title = _get_policy_field(policy, "title", db_key)
+                if (db_key.replace('_', ' ') in policy_key or policy_key in db_key) and title not in seen:
+                    if isinstance(policy, dict):
+                        rec = dict(policy)
+                    else:
+                        rec = policy.to_dict()
+                    rec['priority_score'] = min(10.0, score)
+                    rec['rationale'] = (
+                        f"Heuristic: Gini={gini_coefficient:.2f}, Poverty={poverty_rate:.1f}%, "
+                        f"Unemployment={unemployment_rate:.1f}%"
+                    )
+                    seen.add(title)
+                    results.append(rec)
+                    break
+
+        return results[:5]
     
     @staticmethod
     def get_policy_combination_analysis(
@@ -422,24 +794,90 @@ class PolicyRecommendationEngine:
         return analysis
 
 
-def get_policy_recommendations_for_region(region_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+def get_policy_recommendations_for_region(
+    region_data: Dict[str, Any],
+    policy_history_context: str = "",
+    openai_api_key: str = None,
+) -> List[Dict[str, Any]]:
     """
-    Main entry point for getting policy recommendations for a region
-    
+    Main entry point for LLM-generated policy recommendations for a region.
+
     Args:
-        region_data: Dictionary with regional economic data
-    
+        region_data: Dictionary with real government API data for the region
+            (gini_coefficient, top_1_percent_share, bottom_50_percent_share,
+             unemployment_rate, poverty_rate, demographics, region)
+        policy_history_context: Optional pre-formatted historical policy text
+            from regional_policy_history.py to ground LLM in evidence
+        openai_api_key: OpenAI API key (falls back to OPENAI_API_KEY env var)
+
     Returns:
-        List of policy recommendations with priority scores
+        List of LLM-generated policy recommendations with priority scores
     """
-    engine = PolicyRecommendationEngine()
-    
-    return engine.get_recommendations_for_situation(
+    return PolicyRecommendationEngine.get_recommendations_for_situation(
         gini_coefficient=region_data.get('gini_coefficient', 0.45),
         top_1_percent_share=region_data.get('top_1_percent_share', 35),
         bottom_50_percent_share=region_data.get('bottom_50_percent_share', 3),
         unemployment_rate=region_data.get('unemployment_rate', 4),
         poverty_rate=region_data.get('poverty_rate', 12),
         demographics=region_data.get('demographics', {}),
-        geographic_focus=region_data.get('region', 'National')
+        geographic_focus=region_data.get('region', 'National'),
+        policy_history_context=policy_history_context,
+        openai_api_key=openai_api_key,
     )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PUBLIC ADMIN INTERFACE  (mirrors regional_policy_history.py pattern)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def reload_policy_database() -> bool:
+    """
+    Force-reload the policy catalog from S3 immediately, bypassing the TTL cache.
+    Call this from an admin endpoint to pick up new policies without restarting.
+    Returns True on success.
+    """
+    return _policy_loader.reload()
+
+
+def update_policy_database(payload: dict) -> bool:
+    """
+    Save an updated policy catalog to S3 AND refresh the in-memory cache.
+
+    payload schema:
+      {
+        "policy_database": {
+          "<key>": {
+            "title": "...",
+            "category": "Education & Workforce Development",
+            "description": "...",
+            "target_populations": [...],
+            "expected_impact": "...",
+            "implementation_difficulty": "Easy|Moderate|Difficult",
+            "cost_estimate": "Low|Moderate|High",
+            "historical_examples": [...],
+            "success_metrics": [...],
+            "prerequisites": [...]
+          },
+          ...
+        },
+        "metadata": {
+          "version": "1.1",
+          "last_updated": "YYYY-MM-DD",
+          "description": "..."
+        }
+      }
+    """
+    return _policy_loader.save_to_s3(payload)
+
+
+def get_policy_database() -> Dict[str, Any]:
+    """
+    Return the current in-memory policy catalog (loaded from S3).
+    Safe to call at any time; triggers a load on first call.
+    """
+    return _policy_loader.get_database()
+
+
+def get_policy_database_metadata() -> Dict[str, Any]:
+    """Return metadata (version, last_updated) for the loaded policy catalog."""
+    return _policy_loader.get_metadata()

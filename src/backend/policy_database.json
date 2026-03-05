@@ -1,0 +1,411 @@
+{
+  "policy_database": {
+    "education_investment": {
+      "title": "Community College & Apprenticeship Expansion",
+      "category": "Education & Workforce Development",
+      "description": "Fund free or subsidized community college and apprenticeship programs to increase access to skills training and reduce barriers to economic mobility.",
+      "target_populations": [
+        "Bottom 50%",
+        "Low-income communities",
+        "Underrepresented minorities"
+      ],
+      "expected_impact": "Increase earning potential by 30-40%, improve wealth mobility",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "High",
+      "historical_examples": [
+        "Post-WWII GI Bill increased college attendance from 5% to 16%",
+        "Germany's dual apprenticeship system reduces youth unemployment to <7%",
+        "Singapore's workforce training programs correlate with 40-year sustained growth"
+      ],
+      "success_metrics": [
+        "Graduation rates increase to 60%+",
+        "Average earnings increase $500K+ lifetime",
+        "Wage gap with college graduates narrows by 25%"
+      ],
+      "prerequisites": [],
+      "key": "education_investment"
+    },
+    "minimum_wage": {
+      "title": "Regional Minimum Wage Adjustment",
+      "category": "Income Support & Wages",
+      "description": "Implement inflation-indexed minimum wage tied to local cost of living to ensure purchasing power parity.",
+      "target_populations": [
+        "Bottom 50% wage earners",
+        "Service industry workers"
+      ],
+      "expected_impact": "Increase purchasing power, reduce reliance on public assistance",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Low",
+      "historical_examples": [
+        "Seattle's minimum wage increase (2014-2021) increased incomes without significant job loss",
+        "15 OECD countries with indexed minimum wages maintain lower inequality",
+        "Denmark's collective bargaining system maintains 22:1 executive-to-worker pay ratio"
+      ],
+      "success_metrics": [
+        "Real income growth for bottom quintile",
+        "Reduced poverty rate by 15-25%",
+        "Improved household financial stability indicator"
+      ],
+      "prerequisites": [],
+      "key": "minimum_wage"
+    },
+    "wealth_building": {
+      "title": "Universal Savings Accounts & Matched Deposits",
+      "category": "Wealth Building & Asset Ownership",
+      "description": "Create government-matched savings accounts for low-income individuals, matching deposits up to a cap to build emergency savings and assets.",
+      "target_populations": [
+        "Bottom 50%",
+        "Bottom 40% by wealth"
+      ],
+      "expected_impact": "Build emergency funds, increase asset ownership, break poverty cycle",
+      "implementation_difficulty": "Easy",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "UK Savings Gateway (2005-2010) increased savings by 30% for low-income families",
+        "Individual Development Accounts in US show 80%+ participation rates and sustained saving",
+        "Singapore's Central Provident Fund increased household asset ownership to 90%"
+      ],
+      "success_metrics": [
+        "Median emergency savings increase to 3 months expenses",
+        "Asset ownership increases by 20%",
+        "Financial resilience index improves"
+      ],
+      "prerequisites": [],
+      "key": "wealth_building"
+    },
+    "progressive_taxation": {
+      "title": "Progressive Tax Reform with Wealth Tax",
+      "category": "Tax & Fiscal Policy",
+      "description": "Increase progressivity through higher top marginal rates and implement modest wealth tax on ultra-high net worth individuals (>$50M).",
+      "target_populations": [
+        "Top 1%",
+        "Ultra-wealthy"
+      ],
+      "expected_impact": "Generate revenue for social programs, reduce wealth concentration",
+      "implementation_difficulty": "Difficult",
+      "cost_estimate": "Variable",
+      "historical_examples": [
+        "Post-WWII US tax rates (70-92% top marginal) coincided with lowest inequality (Gini ~0.40)",
+        "Nordic countries maintain Gini coefficients 0.25-0.27 with progressive taxation",
+        "UK wealth tax (1974-1997) raised £3B+ for social programs"
+      ],
+      "success_metrics": [
+        "Gini coefficient improves by 5-10%",
+        "Tax revenue increases by 8-12% of GDP",
+        "Wealth concentration (share of top 1%) decreases"
+      ],
+      "prerequisites": [],
+      "key": "progressive_taxation"
+    },
+    "home_ownership": {
+      "title": "Down Payment Assistance & Community Development Banking",
+      "category": "Housing & Community Development",
+      "description": "Expand down payment assistance programs and support community development financial institutions to increase minority homeownership.",
+      "target_populations": [
+        "Bottom 50% by wealth",
+        "Underrepresented minorities",
+        "First-time homebuyers"
+      ],
+      "expected_impact": "Wealth accumulation through home equity, generational wealth building",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "GI Bill homeownership programs increased White homeownership rate from 43% to 65% (1945-1970)",
+        "Since restrictions eased, Black homeownership increased 30% (2012-2021)",
+        "Down payment assistance programs show 75% sustained homeownership rates"
+      ],
+      "success_metrics": [
+        "Homeownership rate increases by 10-15 percentage points",
+        "Median household wealth gap narrows by 30%",
+        "Home equity as % of household wealth increases"
+      ],
+      "prerequisites": [],
+      "key": "home_ownership"
+    },
+    "small_business": {
+      "title": "Targeted Small Business Access to Capital",
+      "category": "Small Business Support",
+      "description": "Establish dedicated funding, mentorship, and contract set-asides for minority-owned and women-owned businesses.",
+      "target_populations": [
+        "Entrepreneurs from disadvantaged backgrounds",
+        "Minority-owned businesses"
+      ],
+      "expected_impact": "Increase entrepreneurship, create jobs in underserved communities",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "SBA 8(a) program grew minority business employment from 0.8M to 4.2M (1969-2012)",
+        "Women-focused lending programs show 85% 5-year survival rate vs 50% baseline",
+        "Brazil's racial quotas for business contracts increased Black business ownership 45%"
+      ],
+      "success_metrics": [
+        "Minority business ownership increases by 40%+",
+        "Job creation in targeted communities increases 2-3x",
+        "Average business revenue grows 25-30% annually"
+      ],
+      "prerequisites": [],
+      "key": "small_business"
+    },
+    "earned_income_tax": {
+      "title": "Expanded Earned Income Tax Credit (EITC)",
+      "category": "Income Support & Wages",
+      "description": "Expand EITC benefit levels and phase-out ranges to provide refundable income support to working families.",
+      "target_populations": [
+        "Working poor",
+        "Bottom 40% income earners"
+      ],
+      "expected_impact": "Direct income support, incentivize work participation",
+      "implementation_difficulty": "Easy",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "EITC expansion (1990s) reduced child poverty by 20% and maintained work incentives",
+        "Every $1 EITC costs $0.30 in reduced spending elsewhere (multiplier effect)",
+        "EITC children show improved educational outcomes and lifetime earnings"
+      ],
+      "success_metrics": [
+        "Child poverty rate decreases by 15-25%",
+        "Working family income increases by $2,000-$3,000 annually",
+        "Work participation rates maintained or increased"
+      ],
+      "prerequisites": [],
+      "key": "earned_income_tax"
+    },
+    "healthcare_access": {
+      "title": "Universal Healthcare or Expanded Coverage",
+      "category": "Healthcare & Benefits",
+      "description": "Implement universal healthcare or significantly expand public coverage to reduce medical bankruptcy and improve health outcomes.",
+      "target_populations": [
+        "Uninsured and underinsured",
+        "Bottom 60% by income"
+      ],
+      "expected_impact": "Reduce medical debt, improve preventive care access, increase productivity",
+      "implementation_difficulty": "Difficult",
+      "cost_estimate": "High",
+      "historical_examples": [
+        "Canada's universal healthcare shows lower medical bankruptcies and better preventive outcomes",
+        "Massachusetts universal healthcare (2006) reduced uninsured rate from 6.3% to 1.9%",
+        "Medicaid expansion in US improved health outcomes and reduced emergency room usage by 40%"
+      ],
+      "success_metrics": [
+        "Medical bankruptcy rate decreases by 90%+",
+        "Preventive care visits increase by 50%",
+        "Health outcomes (life expectancy, disease prevention) improve"
+      ],
+      "prerequisites": [
+        "Political consensus on healthcare approach"
+      ],
+      "key": "healthcare_access"
+    },
+    "housing_first": {
+      "title": "Housing-First Homelessness Prevention",
+      "category": "Housing & Community Development",
+      "description": "Provide subsidized permanent housing and supportive services to chronically homeless populations to break the poverty cycle.",
+      "target_populations": [
+        "Chronically homeless",
+        "Households with multiple risk factors"
+      ],
+      "expected_impact": "Reduce medical costs, improve employment prospects, strengthen communities",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "Utah's Housing First initiative reduced chronic homelessness by 90%",
+        "Salt Lake City program shows cost savings of $16,281 per person annually",
+        "Finland ended chronic homelessness through Housing First approach"
+      ],
+      "success_metrics": [
+        "Homelessness decreases by 50%+ in 5 years",
+        "Per-capita healthcare costs decrease by $10,000+",
+        "Employment rate for formerly homeless increases 60%"
+      ],
+      "prerequisites": [],
+      "key": "housing_first"
+    },
+    "land_value_tax": {
+      "title": "Land Value Tax Implementation",
+      "category": "Tax & Fiscal Policy",
+      "description": "Implement tax on unimproved land value to capture public value, discourage speculation, and fund public goods.",
+      "target_populations": [
+        "General population (progressive distribution)",
+        "High-value real estate holders"
+      ],
+      "expected_impact": "More efficient land use, reduce speculative bubbles, fund public investment",
+      "implementation_difficulty": "Difficult",
+      "cost_estimate": "Low",
+      "historical_examples": [
+        "Denmark's property tax on land values maintains housing affordability",
+        "Singapore's land value taxation combined with public housing serves 80% of population",
+        "South Africa's land reform program redistributed land to millions"
+      ],
+      "success_metrics": [
+        "Housing affordability improves by 15-20%",
+        "Speculative real estate transactions decrease",
+        "Public revenue from land tax supports community investment"
+      ],
+      "prerequisites": [],
+      "key": "land_value_tax"
+    },
+    "individual_tax_relief": {
+      "title": "Middle-Income Tax Relief & Refundable Credits",
+      "category": "Tax & Fiscal Policy",
+      "description": "Expand tax refundable credits and reduce tax burden for middle-income households (earning $50K-$150K annually) to increase take-home pay.",
+      "target_populations": [
+        "Middle-income households ($50K-$150K)",
+        "Working families"
+      ],
+      "expected_impact": "Increase disposable income by $2,000-$5,000 annually per household, boost consumer spending",
+      "implementation_difficulty": "Easy",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "2017 US Tax Cuts and Jobs Act increased take-home pay for middle-income earners",
+        "Canada's Canada Workers Benefit expanded credits by $1,400+ per eligible worker",
+        "UK Child Tax Credit increases disposable income for families by £2,300 annually"
+      ],
+      "success_metrics": [
+        "Average household take-home income increases by $3,000+ annually",
+        "Consumer spending increases by 5-8%",
+        "Poverty rate decreases by 8-12%",
+        "Emergency savings for middle-income households increase 25%+"
+      ],
+      "prerequisites": [],
+      "key": "individual_tax_relief"
+    },
+    "student_debt_relief": {
+      "title": "Student Loan Forgiveness & Interest Rate Relief",
+      "category": "Income Support & Wages",
+      "description": "Implement targeted student loan forgiveness (up to $50K for public service workers) and reduce interest rates on remaining federal student loans to 1-2%.",
+      "target_populations": [
+        "Student loan borrowers (~45M Americans)",
+        "Public service workers",
+        "Recent graduates"
+      ],
+      "expected_impact": "Free up $300-$500 monthly household cash flow, enable 15M households to buy homes/start businesses",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "High",
+      "historical_examples": [
+        "Income-Based Repayment plans cap payments at 20% of discretionary income",
+        "Public Service Loan Forgiveness program forgives debt after 10 years of service",
+        "Australia's income-contingent loan scheme adapts repayment to earnings capacity",
+        "Germany eliminated tuition fees and reduced student debt burden by 60%+"
+      ],
+      "success_metrics": [
+        "Average monthly household savings of $300-$500 from reduced payments",
+        "Home purchase rate for young adults increases 20%",
+        "Small business formation by millennials increases 35%",
+        "Cumulative household wealth increases $20K+ per borrower"
+      ],
+      "prerequisites": [],
+      "key": "student_debt_relief"
+    },
+    "child_dependent_credits": {
+      "title": "Enhanced Child & Dependent Tax Credits",
+      "category": "Income Support & Wages",
+      "description": "Expand Child Tax Credit to $3,500+ per child (up from $2,000) and make fully refundable for all households including those with zero tax liability.",
+      "target_populations": [
+        "Families with children (60M+ children)",
+        "Low-income parents",
+        "Single parents"
+      ],
+      "expected_impact": "Increase annual child tax credit payments to $35K+ families by $3,000-$5,000",
+      "implementation_difficulty": "Easy",
+      "cost_estimate": "High",
+      "historical_examples": [
+        "2021 American Rescue Plan expanded CTC to $3,600, reducing child poverty by 25%+",
+        "Canadian Child Benefit provides $6,400+ per child in low-income families",
+        "UK Child Benefit provides £21+ per week per child to all families",
+        "Australia's Family Tax Benefit payments reach $4,100+ per family annually"
+      ],
+      "success_metrics": [
+        "Child poverty rate decreases by 30%",
+        "Annual income for families with children increases $4,000+",
+        "Educational outcomes and health metrics improve for low-income children",
+        "Parental workforce participation increases 8%"
+      ],
+      "prerequisites": [],
+      "key": "child_dependent_credits"
+    },
+    "healthcare_savings_expansion": {
+      "title": "Health Savings Account Expansion & Tax Incentives",
+      "category": "Healthcare & Benefits",
+      "description": "Expand HSA contribution limits to $10,000+ and allow use for broader medical expenses (insurance premiums, childcare with health component, fitness).",
+      "target_populations": [
+        "Middle and upper-middle income households ($75K-$200K)",
+        "Self-employed individuals"
+      ],
+      "expected_impact": "Save $2,000-$3,000 annually in taxes, accumulate tax-free medical savings",
+      "implementation_difficulty": "Easy",
+      "cost_estimate": "Low",
+      "historical_examples": [
+        "Current HSA limits ($4,150 individual, $8,300 family) save $1,000-$2,000 in taxes",
+        "Singapore's healthcare savings accounts (CPF) reduce per-capita costs while building savings",
+        "Switzerland's HSA-like system with tax deductions enables $100K+ in lifetime medical savings"
+      ],
+      "success_metrics": [
+        "Healthcare cost burden decreases 15-20% for HSA participants",
+        "Personal health savings accumulate $50K+ per household over 20 years",
+        "Healthcare expenditure as % of household income decreases 3-5%",
+        "Preventive care participation rates increase 30%"
+      ],
+      "prerequisites": [],
+      "key": "healthcare_savings_expansion"
+    },
+    "consumer_debt_relief": {
+      "title": "Interest Rate Caps & Consumer Debt Relief",
+      "category": "Income Support & Wages",
+      "description": "Cap interest rates at 15-20% for credit cards and personal loans, implement debt restructuring programs for households over $10K in unsecured debt.",
+      "target_populations": [
+        "Low-income households with credit card debt (~40M households)",
+        "Subprime borrowers"
+      ],
+      "expected_impact": "Save $2,000-$5,000 annually on debt payments, avoid predatory lending, increase household financial stability",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Low",
+      "historical_examples": [
+        "CARD Act (2009) capped credit card rate increases and improved transparency",
+        "Consumer Credit Acts in multiple countries cap rates at 16-25%",
+        "New Hampshire's payday loan rate caps reduced defaults by 35%",
+        "UK caps high-cost short-term credit at 0.8% daily (effective 29.2% annual)"
+      ],
+      "success_metrics": [
+        "Average household credit card savings of $3,000 annually",
+        "Default rates on high-cost debt decrease 40%+",
+        "Bankruptcy filings from medical/debt causes decrease 30%",
+        "Household emergency savings increase as debt service decreases"
+      ],
+      "prerequisites": [],
+      "key": "consumer_debt_relief"
+    },
+    "homeowner_relief": {
+      "title": "Homeowner Tax Relief & Mortgage Assistance",
+      "category": "Housing & Community Development",
+      "description": "Increase deductibility of mortgage interest, property taxes; expand first-time homebuyer tax credits to $20K and establish hardship refinancing programs.",
+      "target_populations": [
+        "Homeowners (~82M households)",
+        "First-time homebuyers",
+        "Underwater mortgages"
+      ],
+      "expected_impact": "Increase home affordability, enable 5M+ additional families to qualify for mortgages, reduce foreclosures",
+      "implementation_difficulty": "Moderate",
+      "cost_estimate": "Moderate",
+      "historical_examples": [
+        "Mortgage Interest Deduction saved homeowners $100B+ annually on federal taxes",
+        "First-time Homebuyer Credit (2008-2010) enabled 4.5M+ home purchases",
+        "Home Affordable Modification Program reduced monthly payments by average $500+",
+        "Australia's First Home Super Saver Scheme enables tax-advantaged saving for down payments"
+      ],
+      "success_metrics": [
+        "Homeownership rate increases 3-5 percentage points",
+        "First-time homebuyer purchases increase 25-30%",
+        "Foreclosure rates decrease 40%-50%",
+        "Home equity accumulation accelerates ($50K+ over 10 years)"
+      ],
+      "prerequisites": [],
+      "key": "homeowner_relief"
+    }
+  },
+  "metadata": {
+    "version": "1.0",
+    "last_updated": "2026-03-05",
+    "description": "MindTheGap policy reference catalog. Edit here to add/update policies without redeploying.",
+    "s3_key": "government-data/policy-database/policy_database.json"
+  }
+}
