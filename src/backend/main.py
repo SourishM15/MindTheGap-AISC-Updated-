@@ -1638,24 +1638,64 @@ async def get_enriched_state(state_name: str):
         profile = load_enriched_state_profile(state_name)
 
         if not profile:
-            return {
-                "success": False,
-                "error": f"No enriched data found for {state_name}"
-            }
+            # Pre-built Supabase profile not available — build a live profile from
+            # the free Census ACS + SAIPE APIs instead of returning an error.
+            logger.info(f"No Supabase profile for {state_name}; building live profile from Census/SAIPE APIs")
+            slug = _safe_slug(state_name)
+            fips = SAIPE_STATE_FIPS.get(slug)
+            census_data = {}
+            if fips and fips != "00":
+                try:
+                    census_data = census_client.get_state_demographics(fips)
+                except Exception as ce:
+                    logger.warning(f"Census API failed for {state_name}: {ce}")
+            saipe_live = {}
+            try:
+                saipe_live = saipe_client.get_state_snapshot(state_name, year=2023)
+            except Exception as se:
+                logger.warning(f"SAIPE API failed for {state_name}: {se}")
 
-        # Enrich with SAIPE state-specific income & poverty data
-        try:
-            saipe_snapshot = saipe_client.get_state_snapshot(state_name, year=2023)
-            if saipe_snapshot:
-                profile["saipe"] = saipe_snapshot
-                # Override demographics with more accurate SAIPE figures
-                if profile.get("demographics"):
-                    if saipe_snapshot.get("poverty_rate") is not None:
-                        profile["demographics"]["poverty_rate"] = saipe_snapshot["poverty_rate"]
-                    if saipe_snapshot.get("median_household_income") is not None:
-                        profile["demographics"]["median_household_income"] = saipe_snapshot["median_household_income"]
-        except Exception as saipe_err:
-            logger.warning(f"Could not enrich with SAIPE data: {saipe_err}")
+            if not census_data and not saipe_live:
+                return {"success": False, "error": f"No data available for {state_name}"}
+
+            profile = {
+                "identity": {
+                    "state_name": state_name,
+                    "fips_code": fips or "",
+                },
+                "demographics": {
+                    "population": census_data.get("population", 0),
+                    "median_age": census_data.get("median_age", 0),
+                    "median_household_income": (
+                        saipe_live.get("median_household_income")
+                        or census_data.get("median_household_income", 0)
+                    ),
+                    "poverty_rate": (
+                        saipe_live.get("poverty_rate")
+                        or census_data.get("poverty_rate", 0)
+                    ),
+                    "child_poverty_rate": saipe_live.get("child_poverty_rate"),
+                    "education_bachelor_and_above": census_data.get("education_bachelor_and_above", 0),
+                    "race_distribution": census_data.get("race_distribution", {}),
+                    "source": "Census ACS 2022 + SAIPE 2023",
+                    "year": 2023,
+                },
+                "saipe": saipe_live,
+                "source": "live_api",
+            }
+        else:
+            # Enrich cached Supabase profile with fresh SAIPE figures
+            try:
+                saipe_snapshot = saipe_client.get_state_snapshot(state_name, year=2023)
+                if saipe_snapshot:
+                    profile["saipe"] = saipe_snapshot
+                    if profile.get("demographics"):
+                        if saipe_snapshot.get("poverty_rate") is not None:
+                            profile["demographics"]["poverty_rate"] = saipe_snapshot["poverty_rate"]
+                        if saipe_snapshot.get("median_household_income") is not None:
+                            profile["demographics"]["median_household_income"] = saipe_snapshot["median_household_income"]
+            except Exception as saipe_err:
+                logger.warning(f"Could not enrich with SAIPE data: {saipe_err}")
 
         return {
             "success": True,
@@ -1670,24 +1710,36 @@ async def get_enriched_state(state_name: str):
 @app.get("/api/enriched-states")
 async def list_enriched_states():
     """List all states with enriched government data available"""
+    # First try Supabase Storage listing; fall back to the full 50-state SAIPE list
     try:
         files = supabase_client.storage.from_('mindthegap-gov-data').list(
             'enriched-regional-data/state-profiles'
         )
         states = [f['name'] for f in files if f.get('name')]
-        return {
-            "success": True,
-            "states_available": len(states),
-            "states": sorted(states),
-            "enriched": True
-        }
+        if states:
+            return {
+                "success": True,
+                "states_available": len(states),
+                "states": sorted(states),
+                "enriched": True
+            }
     except Exception as e:
-        logger.error(f"Error listing enriched states: {e}")
-        return {
-            "success": False,
-            "error": "Could not list states",
-            "states": []
-        }
+        logger.warning(f"Supabase state listing failed: {e}")
+
+    # Fallback: return all 50 states (data is fetched live per-state request)
+    from saipe_api_client import STATE_FIPS as _SFIPS
+    all_states = sorted(
+        k.replace("-", " ").title()
+        for k in _SFIPS
+        if k not in ("united-states", "us")
+    )
+    return {
+        "success": True,
+        "states_available": len(all_states),
+        "states": all_states,
+        "enriched": False,
+        "note": "Live data — fetched on demand from Census/SAIPE APIs"
+    }
 
 @app.post("/api/admin/enrich-metro-areas")
 async def enrich_metro_areas(_: None = Depends(_require_admin)):
