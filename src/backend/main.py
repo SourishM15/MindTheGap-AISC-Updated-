@@ -3,7 +3,6 @@ import re
 import logging
 import json
 import secrets
-import boto3
 from functools import lru_cache
 from fastapi import FastAPI, HTTPException, Header, Depends
 from typing import Optional
@@ -12,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
 import networkx as nx
 from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from dotenv import load_dotenv
 from graph_rag import get_graph_rag_context
@@ -43,12 +42,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(override=True)
 
-# Set up OpenAI API key
-openai_api_key = os.getenv("OPENAI_API_KEY")
-if not openai_api_key:
-    logger.warning("OPENAI_API_KEY not found in .env file. Please add it.")
+# Set up Groq API key
+groq_api_key = os.getenv("GROQ_API_KEY")
+if not groq_api_key:
+    logger.warning("GROQ_API_KEY not found in .env file. Please add it.")
 
 # Initialize FastAPI app
 app = FastAPI(title="MindTheGap API", version="2.0", docs_url="/docs")
@@ -86,35 +85,33 @@ def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
         raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
 # ---------------------------------------------------------------------------
-# --- Enrichment Data Loading (Government Data from S3) ---
+# --- Enrichment Data Loading (Government Data from Supabase Storage) ---
 @lru_cache(maxsize=1)
 def load_enrichment_knowledge_base():
-    """Load chatbot knowledge base from S3 enrichment pipeline"""
+    """Load chatbot knowledge base from Supabase Storage enrichment pipeline"""
     try:
-        s3_client = boto3.client('s3', region_name='us-east-2')
-        
-        # Load knowledge base
-        response = s3_client.get_object(
-            Bucket='mindthegap-gov-data',
-            Key='chatbot-training-data/knowledge-base.json'
+        from supabase_db import supabase_client
+        if not supabase_client:
+            raise RuntimeError("Supabase client unavailable")
+
+        kb_raw = supabase_client.storage.from_('mindthegap-gov-data').download(
+            'chatbot-training-data/knowledge-base.json'
         )
-        knowledge_base = json.loads(response['Body'].read())
-        
-        # Load correlation patterns
-        response = s3_client.get_object(
-            Bucket='mindthegap-gov-data',
-            Key='chatbot-training-data/economic-correlations.json'
+        knowledge_base = json.loads(kb_raw)
+
+        corr_raw = supabase_client.storage.from_('mindthegap-gov-data').download(
+            'chatbot-training-data/economic-correlations.json'
         )
-        correlations = json.loads(response['Body'].read())
-        
-        logger.info("✓ Enrichment knowledge base loaded from S3")
+        correlations = json.loads(corr_raw)
+
+        logger.info("✓ Enrichment knowledge base loaded from Supabase Storage")
         return {
             'knowledge_base': knowledge_base,
             'correlations': correlations,
             'status': 'loaded'
         }
     except Exception as e:
-        logger.warning(f"Could not load enrichment knowledge base from S3: {e}")
+        logger.warning(f"Could not load enrichment knowledge base: {e}")
         return {
             'knowledge_base': None,
             'correlations': None,
@@ -122,35 +119,31 @@ def load_enrichment_knowledge_base():
         }
 
 def load_enriched_state_profile(state_name: str) -> dict:
-    """Load enriched profile for a specific state from S3"""
+    """Load enriched profile for a specific state from Supabase Storage"""
     try:
-        s3_client = boto3.client('s3', region_name='us-east-2')
+        from supabase_db import supabase_client
+        if not supabase_client:
+            return None
         state_slug = _safe_slug(state_name)
-        
-        response = s3_client.get_object(
-            Bucket='mindthegap-gov-data',
-            Key=f'enriched-regional-data/state-profiles/{state_slug}/profile.json'
+        raw = supabase_client.storage.from_('mindthegap-gov-data').download(
+            f'enriched-regional-data/state-profiles/{state_slug}/profile.json'
         )
-        
-        profile = json.loads(response['Body'].read())
-        return profile
+        return json.loads(raw)
     except Exception as e:
         logger.warning(f"Could not load enriched state profile for {state_name}: {e}")
         return None
 
 def load_enriched_metro_profile(metro_name: str) -> dict:
-    """Load enriched profile for a specific metro area from S3"""
+    """Load enriched profile for a specific metro area from Supabase Storage"""
     try:
-        s3_client = boto3.client('s3', region_name='us-east-2')
+        from supabase_db import supabase_client
+        if not supabase_client:
+            return None
         metro_slug = _safe_slug(metro_name)
-        
-        response = s3_client.get_object(
-            Bucket='mindthegap-gov-data',
-            Key=f'enriched-regional-data/metro-areas/{metro_slug}/profile.json'
+        raw = supabase_client.storage.from_('mindthegap-gov-data').download(
+            f'enriched-regional-data/metro-areas/{metro_slug}/profile.json'
         )
-        
-        profile = json.loads(response['Body'].read())
-        return profile
+        return json.loads(raw)
     except Exception as e:
         logger.warning(f"Could not load enriched metro profile for {metro_name}: {e}")
         return None
@@ -318,36 +311,32 @@ else:
 # --- LangChain and RAG Setup ---
 def setup_llm_chain():
     """Sets up the LangChain runnable sequence for enhanced question answering."""
-    llm = ChatOpenAI(temperature=0.2, api_key=openai_api_key, model="gpt-3.5-turbo")
+    llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
     
-    template = """You are an expert AI analyst for the MindTheGap project, specializing in wealth inequality analysis and economic policy recommendations. Your knowledge includes:
+    template = """You are a non-partisan AI analyst for MindTheGap, a project dedicated to economic honesty and data integrity. You specialise in US wealth inequality analysis using real government data.
 
 PRIMARY DATA SOURCES:
-- Federal Reserve's Distributional Financial Accounts (DFA): Comprehensive national-level data on wealth distribution by percentile groups
-- US Census Bureau: Demographic and socioeconomic data by race, age, education, and location
-- Bureau of Labor Statistics: Employment and income data
-- Government economic indicators and historical policy outcomes
+- Federal Reserve Distributional Financial Accounts (DFA): wealth distribution by percentile
+- US Census Bureau ACS: demographic and socioeconomic data
+- Bureau of Labor Statistics: employment and wage data
+- SAIPE: small-area poverty and income estimates
+- FRED: macroeconomic indicators
 
-YOUR EXPERTISE INCLUDES:
-- Wealth inequality analysis and trends
-- Demographic disparities in wealth and income
-- Economic policy impacts (both historical and projected)
-- Evidence-based policy recommendations
-- Regional economic variations
+CORE INTEGRITY RULES — non-negotiable:
+1. Cite the specific data source and metric for every factual claim (e.g. "BLS 2023: 3.8% unemployment")
+2. If the Context lacks data to support a claim, say so explicitly — do not fill gaps with assumptions
+3. For policy analysis: cite real programs by name, jurisdiction, year, and MEASURED outcome — not theoretical projections
+4. Always present documented trade-offs and unintended consequences alongside any policy discussion
+5. If economic evidence is contested or mixed among mainstream economists, say so — never misrepresent academic consensus
+6. Use precise terminology: percentile groups, Gini coefficients, real vs nominal values — not vague qualifiers
+7. Distinguish correlation from causation when discussing data trends
+8. Do not advocate for any political position — present the honest empirical picture
 
-GUIDELINES FOR RESPONSES:
-1. ALWAYS cite data sources and metrics from the Context provided
-2. For geographic queries: Prioritize local data when available; supplement with national context
-3. For trend queries: Analyze changes over time and highlight inflection points
-4. For policy queries: Provide evidence-based recommendations based on historical precedents
-5. Be honest about uncertainty - if Context lacks data, explicitly state this
-
-IMPORTANT RULES:
-- Use the specific metrics and percentages provided in the Context
-- When discussing wealth disparity, use precise terminology (percentile groups, not vague terms)
-- Support recommendations with historical examples and empirical evidence
-- Consider implementation feasibility and unintended consequences
-- Maintain objectivity and present multiple perspectives when relevant
+GUIDELINES:
+- For geographic queries: prioritise local data; explicitly note when only national data is available
+- For trend queries: cite specific years and inflection points directly from the data
+- For policy queries: ground every claim in historical precedent with measured, documented outcomes
+- When uncertain: explicitly state confidence level and what additional data would change the answer
 
 Context: {context}
 
@@ -640,10 +629,10 @@ User: {question}
 
 Response:"""
             
-            llm = ChatOpenAI(
-                temperature=0.7, 
-                api_key=openai_api_key, 
-                model="gpt-3.5-turbo", 
+            llm = ChatGroq(
+                temperature=0.7,
+                groq_api_key=groq_api_key,
+                model_name="llama-3.3-70b-versatile",
                 max_tokens=150
             )
             response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -732,10 +721,10 @@ User Question: {question}
 Articulate Comparison:"""
                     max_tokens = 250
                 
-                llm = ChatOpenAI(
-                    temperature=0.3, 
-                    api_key=openai_api_key, 
-                    model="gpt-3.5-turbo", 
+                llm = ChatGroq(
+                    temperature=0.3,
+                    groq_api_key=groq_api_key,
+                    model_name="llama-3.3-70b-versatile",
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -825,10 +814,10 @@ User Question: {question}
 Natural Analysis:"""
                     max_tokens = 250
                 
-                llm = ChatOpenAI(
-                    temperature=0.3, 
-                    api_key=openai_api_key, 
-                    model="gpt-3.5-turbo", 
+                llm = ChatGroq(
+                    temperature=0.3,
+                    groq_api_key=groq_api_key,
+                    model_name="llama-3.3-70b-versatile",
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -845,7 +834,72 @@ Natural Analysis:"""
                     "query_type": "state_policy_analysis" if is_policy_query else "state_analysis",
                     "policy_history_used": bool(policy_history_section),
                 }
-        
+
+            elif is_policy_query:
+                # State profile not in Supabase — use PolicyRecommendationEngine with
+                # national baseline metrics to still return evidence-based recommendations
+                graph_ctx = get_graph_rag_context(question, graph)
+                policy_hist = get_policy_history_context(
+                    region=location,
+                    current_metrics={"poverty_rate": 11.5, "gini_coefficient": 0.49},
+                    max_policies=4,
+                )
+                region_data = {
+                    "gini_coefficient": 0.49,
+                    "top_1_percent_share": 32.0,
+                    "bottom_50_percent_share": 2.6,
+                    "unemployment_rate": 3.8,
+                    "poverty_rate": 11.5,
+                    "region": location,
+                    "demographics": {},
+                }
+                recs = get_policy_recommendations_for_region(
+                    region_data=region_data,
+                    policy_history_context=policy_hist,
+                )
+                rec_text = "\n".join(
+                    f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
+                    f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
+                    for i, r in enumerate(recs[:5], 1)
+                )
+                prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
+The user is asking about policy recommendations for {location}.
+
+Strict rules you must follow:
+- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
+- For each policy, state at least one documented trade-off or unintended consequence from real implementations
+- If evidence is mixed or contested among mainstream economists, say so explicitly — do not misrepresent consensus
+- Anchor all projected impacts to measured historical outcomes, not optimistic assumptions
+- Do not advocate for any political position — your role is honest economic analysis
+- If the data for this region is limited, say so rather than extrapolating
+
+Evidence-Based Policy Recommendations:
+{rec_text}
+
+Additional Economic Context:
+{graph_ctx}
+
+User Question: {question}
+
+Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
+                llm = ChatGroq(
+                    temperature=0.3,
+                    groq_api_key=groq_api_key,
+                    model_name="llama-3.3-70b-versatile",
+                    max_tokens=700,
+                )
+                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                reply = response.content if hasattr(response, "content") else str(response)
+                context.add_message(role="assistant", content=reply, topic=topic.value)
+                context.current_region = location
+                return {
+                    "reply": reply,
+                    "source": "policy_engine_national_baseline",
+                    "location": location,
+                    "query_type": "state_policy_analysis",
+                    "recommendations_count": len(recs),
+                }
+
         # Handle city/metro area queries (load from S3)
         if location_info['type'] == 'city':
             city_name = location_info['name']
@@ -913,10 +967,10 @@ User Question: {question}
 Natural Analysis:"""
                     max_tokens = 250
                 
-                llm = ChatOpenAI(
-                    temperature=0.3, 
-                    api_key=openai_api_key, 
-                    model="gpt-3.5-turbo", 
+                llm = ChatGroq(
+                    temperature=0.3,
+                    groq_api_key=groq_api_key,
+                    model_name="llama-3.3-70b-versatile",
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -935,11 +989,116 @@ Natural Analysis:"""
                     "query_type": "city_policy_analysis" if is_policy_query else "city_analysis",
                     "policy_history_used": bool(policy_history_section),
                 }
-        
+
+            elif is_policy_query:
+                # City profile not in Supabase — use PolicyRecommendationEngine with
+                # national baseline so policy questions still get a full answer
+                graph_ctx = get_graph_rag_context(question, graph)
+                policy_hist = get_policy_history_context(
+                    region=city_name,
+                    current_metrics={"poverty_rate": 11.5, "gini_coefficient": 0.49},
+                    max_policies=4,
+                )
+                region_data = {
+                    "gini_coefficient": 0.49,
+                    "top_1_percent_share": 32.0,
+                    "bottom_50_percent_share": 2.6,
+                    "unemployment_rate": 3.8,
+                    "poverty_rate": 11.5,
+                    "region": city_name,
+                    "demographics": {},
+                }
+                recs = get_policy_recommendations_for_region(
+                    region_data=region_data,
+                    policy_history_context=policy_hist,
+                )
+                rec_text = "\n".join(
+                    f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
+                    f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
+                    for i, r in enumerate(recs[:5], 1)
+                )
+                prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
+The user is asking about policy recommendations for {city_name}.
+
+Strict rules you must follow:
+- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
+- For each policy, state at least one documented trade-off or unintended consequence from real implementations
+- If evidence is mixed or contested among mainstream economists, say so explicitly
+- Anchor all projected impacts to measured historical outcomes, not optimistic assumptions
+- Do not advocate for any political position — your role is honest economic analysis
+- If data for this city is limited, say so rather than extrapolating
+
+Evidence-Based Policy Recommendations:
+{rec_text}
+
+Additional Economic Context:
+{graph_ctx}
+
+User Question: {question}
+
+Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
+                llm = ChatGroq(
+                    temperature=0.3,
+                    groq_api_key=groq_api_key,
+                    model_name="llama-3.3-70b-versatile",
+                    max_tokens=700,
+                )
+                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                reply = response.content if hasattr(response, "content") else str(response)
+                context.add_message(role="assistant", content=reply, topic=topic.value)
+                context.current_region = city_name
+                return {
+                    "reply": reply,
+                    "source": "policy_engine_city_baseline",
+                    "city": city_name,
+                    "query_type": "city_policy_analysis",
+                    "recommendations_count": len(recs),
+                }
+
         # For general, non-location-specific questions, use semantic search + LLM
         graph_rag_context = get_graph_rag_context(question, graph)
-        
-        prompt_text = f"""You are a wealth inequality and economics expert.
+
+        if is_policy_query:
+            # Policy question with no specific location — use PolicyRecommendationEngine
+            # with national defaults and the full policy reference library
+            region_data = {
+                "gini_coefficient": 0.49,
+                "top_1_percent_share": 32.0,
+                "bottom_50_percent_share": 2.6,
+                "unemployment_rate": 3.8,
+                "poverty_rate": 11.5,
+                "region": "National",
+                "demographics": {},
+            }
+            recs = get_policy_recommendations_for_region(region_data=region_data)
+            rec_text = "\n".join(
+                f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
+                f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
+                for i, r in enumerate(recs[:5], 1)
+            )
+            prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
+Answer the user's policy question using the evidence and data context below.
+
+Strict rules:
+- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
+- For each policy discussed, state at least one documented trade-off or unintended consequence
+- If evidence is mixed or contested among mainstream economists, say so explicitly
+- Anchor all impact estimates to measured historical outcomes — not optimistic projections
+- Do not advocate for any political position — present the honest empirical picture
+- Distinguish correlation from causation when discussing trends
+
+Evidence-Based Policy Recommendations (national baseline):
+{rec_text}
+
+Wealth Data Context:
+{graph_rag_context}
+
+User Question: {question}
+
+Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
+            max_tokens = 700
+        else:
+            prompt_text = f"""You are a wealth inequality and economics expert.
 Answer this question using your knowledge and the context provided.
 Be conversational and direct. (2-3 sentences max)
 
@@ -948,23 +1107,24 @@ Context: {graph_rag_context}
 Question: {question}
 
 Answer:"""
-        
-        llm = ChatOpenAI(
-            temperature=0.3, 
-            api_key=openai_api_key, 
-            model="gpt-3.5-turbo", 
-            max_tokens=300
+            max_tokens = 300
+
+        llm = ChatGroq(
+            temperature=0.3,
+            groq_api_key=groq_api_key,
+            model_name="llama-3.3-70b-versatile",
+            max_tokens=max_tokens,
         )
         response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
         reply = response.content if hasattr(response, 'content') else str(response)
-        
+
         # Track general question in conversation context
         context.add_message(role="assistant", content=reply, topic=topic.value)
-        
+
         return {
             "reply": reply,
-            "source": "semantic_search",
-            "query_type": "general_question"
+            "source": "policy_engine_national" if is_policy_query else "semantic_search",
+            "query_type": "general_policy_question" if is_policy_query else "general_question",
         }
         
     except Exception as e:
@@ -1051,7 +1211,7 @@ async def get_policy(request: PolicyRequest):
         recommendations = get_policy_recommendations_for_region(
             region_data=region_data,
             policy_history_context=policy_history,
-            openai_api_key=openai_api_key,
+            openai_api_key=groq_api_key,
         )
 
         return {
@@ -1511,18 +1671,10 @@ async def get_enriched_state(state_name: str):
 async def list_enriched_states():
     """List all states with enriched government data available"""
     try:
-        s3_client = boto3.client('s3', region_name='us-east-2')
-        
-        response = s3_client.list_objects_v2(
-            Bucket='mindthegap-gov-data',
-            Prefix='enriched-regional-data/state-profiles/',
-            Delimiter='/'
+        files = supabase_client.storage.from_('mindthegap-gov-data').list(
+            'enriched-regional-data/state-profiles'
         )
-        
-        states = []
-        if 'CommonPrefixes' in response:
-            states = [prefix['Prefix'].split('/')[-2] for prefix in response['CommonPrefixes']]
-        
+        states = [f['name'] for f in files if f.get('name')]
         return {
             "success": True,
             "states_available": len(states),
@@ -1552,23 +1704,21 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
                 "error": "Could not fetch metro area data"
             }
         
-        # Upload each metro profile to S3
-        s3_client = boto3.client('s3', region_name='us-east-2')
+        # Upload each metro profile to Supabase Storage
         uploaded_count = 0
         
         for metro_name, metro_data in all_metros.items():
             try:
                 metro_slug = metro_name.lower().replace(' ', '-')
-                s3_key = f'enriched-regional-data/metro-areas/{metro_slug}/profile.json'
+                storage_key = f'enriched-regional-data/metro-areas/{metro_slug}/profile.json'
                 
-                s3_client.put_object(
-                    Bucket='mindthegap-gov-data',
-                    Key=s3_key,
-                    Body=json.dumps(metro_data, indent=2),
-                    ContentType='application/json'
+                supabase_client.storage.from_('mindthegap-gov-data').upload(
+                    storage_key,
+                    json.dumps(metro_data, indent=2).encode(),
+                    file_options={"upsert": "true"}
                 )
                 
-                logger.info(f"✓ Uploaded {metro_name} to S3")
+                logger.info(f"✓ Uploaded {metro_name} to Supabase Storage")
                 uploaded_count += 1
                 
             except Exception as e:
@@ -1576,7 +1726,7 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
         
         return {
             "success": True,
-            "message": f"Enriched and uploaded {uploaded_count} metro areas to S3",
+            "message": f"Enriched and uploaded {uploaded_count} metro areas to Supabase Storage",
             "metro_areas_enriched": uploaded_count,
             "total_metro_areas": len(all_metros),
             "timestamp": str(pd.Timestamp.now())
@@ -1590,18 +1740,10 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
 async def list_enriched_metro_areas():
     """List all metro areas with enriched government data available"""
     try:
-        s3_client = boto3.client('s3', region_name='us-east-2')
-        
-        response = s3_client.list_objects_v2(
-            Bucket='mindthegap-gov-data',
-            Prefix='enriched-regional-data/metro-areas/',
-            Delimiter='/'
+        files = supabase_client.storage.from_('mindthegap-gov-data').list(
+            'enriched-regional-data/metro-areas'
         )
-        
-        metros = []
-        if 'CommonPrefixes' in response:
-            metros = [prefix['Prefix'].split('/')[-2] for prefix in response['CommonPrefixes']]
-        
+        metros = [f['name'] for f in files if f.get('name')]
         return {
             "success": True,
             "metros_available": len(metros),

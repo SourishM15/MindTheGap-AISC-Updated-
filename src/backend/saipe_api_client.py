@@ -18,7 +18,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 # All 50 states + DC: name (lowercase, no spaces) → FIPS code
 STATE_FIPS: Dict[str, str] = {

@@ -10,7 +10,7 @@ from typing import Dict, List, Optional
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 class CensusAPIClient:
     """Fetch Census Bureau data via American Community Survey (ACS)"""

@@ -1,13 +1,13 @@
-"""Fetch latest DFA data from Fed ZIP, upload to S3, update local CSVs."""
-import io, os, requests, boto3, pandas as pd, zipfile
+"""Fetch latest DFA data from Fed ZIP, upload to Supabase Storage, update local CSVs."""
+import io, os, requests, pandas as pd, zipfile
 from datetime import datetime, timezone
 from dotenv import load_dotenv
+from supabase import create_client
 
 # Load .env so AWS credentials (AWS_ACCESS_KEY_ID, etc.) are available
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'), override=True)
 
 BUCKET = "mindthegap-gov-data"
-REGION = os.getenv("AWS_REGION", "us-east-2")
 S3_PREFIX = "government-data/census/"
 LOCAL_DATA = os.path.join(os.path.dirname(__file__), '..', 'data')
 
@@ -20,13 +20,12 @@ def main():
     r.raise_for_status()
     print(f"  Downloaded {len(r.content):,} bytes")
 
-    s3 = boto3.client(
-        's3',
-        region_name=REGION,
-        aws_access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
-        aws_secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
-        aws_session_token=os.getenv('AWS_SESSION_TOKEN'),
-    )
+    _url = os.getenv('SUPABASE_URL')
+    _key = os.getenv('SUPABASE_KEY')
+    sb = create_client(_url, _key) if _url and _key else None
+    if not sb:
+        print("ERROR: SUPABASE_URL / SUPABASE_KEY not set — cannot upload")
+        return
     zf = zipfile.ZipFile(io.BytesIO(r.content))
 
     print(f"\nFiles in ZIP: {zf.namelist()}\n")
@@ -66,23 +65,17 @@ def main():
         except Exception as e:
             print(f"    ✗ Local write failed (non-fatal): {e}")
 
-        # Upload to S3
+        # Upload to Supabase Storage
         try:
-            s3.put_object(
-                Bucket=BUCKET,
-                Key=S3_PREFIX + fname,
-                Body=content,
-                ContentType='text/csv',
-                Metadata={
-                    'fetched': datetime.now(timezone.utc).isoformat(),
-                    'latest_quarter': latest,
-                    'source': FED_ZIP_URL,
-                }
+            sb.storage.from_(BUCKET).upload(
+                S3_PREFIX + fname,
+                content,
+                file_options={"upsert": "true"}
             )
-            print(f"    ✓ Uploaded to s3://{BUCKET}/{S3_PREFIX}{fname}")
+            print(f"    ✓ Uploaded to supabase://{BUCKET}/{S3_PREFIX}{fname}")
             uploaded.append((fname, latest))
         except Exception as e:
-            print(f"    ✗ S3 upload failed (local copy still updated): {e}")
+            print(f"    ✗ Supabase Storage upload failed (local copy still updated): {e}")
             skipped.append(fname)
 
     print("\n" + "="*60)

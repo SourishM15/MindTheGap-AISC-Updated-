@@ -2,11 +2,11 @@ fastapi
 uvicorn
 pandas
 langchain
-langchain-openai
+langchain-groq
 langchain-community
 numpy
 networkx
-exa_py
+# exa_py  # removed — replaced by free Census/BLS/FRED API clients
 langchain_experimental
 spacy
 python-dotenv
@@ -25,7 +25,6 @@ census
 sqlalchemy
 redis
 supabase
-boto3
 pyathena
 census
 requests

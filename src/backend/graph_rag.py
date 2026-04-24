@@ -2,11 +2,30 @@ import spacy
 import networkx as nx
 from typing import List, Dict, Any, Tuple
 from thefuzz import process, fuzz
-from web_search import search_and_extract_web_data
 from vector_embeddings import VectorStore, create_wealth_query_embedding
 from trend_analysis import TrendAnalyzer, analyze_wealth_gap_trends
 from government_api import get_local_economic_indicators
+from census_api_client import CensusAPIClient, STATE_FIPS as CENSUS_STATE_FIPS
 import logging
+
+_census_client = CensusAPIClient()
+
+# Full state name → 2-letter abbreviation lookup
+_STATE_NAME_TO_ABBR = {
+    'Alabama': 'AL', 'Alaska': 'AK', 'Arizona': 'AZ', 'Arkansas': 'AR',
+    'California': 'CA', 'Colorado': 'CO', 'Connecticut': 'CT', 'Delaware': 'DE',
+    'Florida': 'FL', 'Georgia': 'GA', 'Hawaii': 'HI', 'Idaho': 'ID',
+    'Illinois': 'IL', 'Indiana': 'IN', 'Iowa': 'IA', 'Kansas': 'KS',
+    'Kentucky': 'KY', 'Louisiana': 'LA', 'Maine': 'ME', 'Maryland': 'MD',
+    'Massachusetts': 'MA', 'Michigan': 'MI', 'Minnesota': 'MN', 'Mississippi': 'MS',
+    'Missouri': 'MO', 'Montana': 'MT', 'Nebraska': 'NE', 'Nevada': 'NV',
+    'New Hampshire': 'NH', 'New Jersey': 'NJ', 'New Mexico': 'NM', 'New York': 'NY',
+    'North Carolina': 'NC', 'North Dakota': 'ND', 'Ohio': 'OH', 'Oklahoma': 'OK',
+    'Oregon': 'OR', 'Pennsylvania': 'PA', 'Rhode Island': 'RI', 'South Carolina': 'SC',
+    'South Dakota': 'SD', 'Tennessee': 'TN', 'Texas': 'TX', 'Utah': 'UT',
+    'Vermont': 'VT', 'Virginia': 'VA', 'Washington': 'WA', 'West Virginia': 'WV',
+    'Wisconsin': 'WI', 'Wyoming': 'WY',
+}
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -234,28 +253,27 @@ def get_graph_rag_context(question: str, graph: nx.Graph) -> str:
     if geographic_entities:
         logger.info(f"Geographic entities detected: {geographic_entities}")
         for location in geographic_entities:
-            # Try to find government data
+            # Map full state name → abbreviation → FIPS, then fetch from Census API
             try:
-                # Simplified API call - in production would map to proper state codes
-                state_code = location[:2].upper() if len(location) > 0 else None
-                if state_code:
+                abbr = _STATE_NAME_TO_ABBR.get(location)
+                fips = CENSUS_STATE_FIPS.get(abbr) if abbr else None
+                if fips:
+                    census_data = _census_client.get_state_demographics(fips)
+                    if census_data:
+                        census_data['Neighborhood Name'] = location
+                        census_data['data_type'] = 'local'
+                        add_node_to_graph(graph, census_data)
+                        local_nodes.append(census_data)
+                        logger.info(f"Added Census API data for {location} (FIPS {fips})")
+                else:
+                    # Try government_api fallback for non-state locations
+                    state_code = abbr or location[:2].upper()
                     indicators = get_local_economic_indicators(state_code)
                     if indicators:
                         local_nodes.append(indicators)
                         logger.info(f"Added economic indicators for {location}")
             except Exception as e:
                 logger.warning(f"Could not fetch government data for {location}: {e}")
-            
-            # Fallback to web search
-            try:
-                local_data = search_and_extract_web_data(location, 
-                                                        preferred_domains=['census.gov', 'bls.gov'])
-                if local_data:
-                    add_node_to_graph(graph, local_data)
-                    local_nodes.append(local_data)
-                    logger.info(f"Added web-sourced data for {location}")
-            except Exception as e:
-                logger.warning(f"Web search failed for {location}: {e}")
     
     # Build context string
     context = create_context_from_nodes(relevant_nodes)

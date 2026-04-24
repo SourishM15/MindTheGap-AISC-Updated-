@@ -12,7 +12,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 class CityAPIClient:
     """

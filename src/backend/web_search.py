@@ -1,25 +1,21 @@
 import os
 import json
 import logging
-from exa_py import Exa
 from dotenv import load_dotenv
-from langchain_openai import OpenAI
+from langchain_groq import ChatGroq
 from langchain_core.prompts import PromptTemplate
 
-load_dotenv()
+load_dotenv(override=True)
 
 logger = logging.getLogger(__name__)
 
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-EXA_API_KEY = os.getenv("EXA_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
 
-if not EXA_API_KEY:
-    logger.warning("EXA_API_KEY not found in .env file. Web search functionality will be limited.")
-    exa = None
-else:
-    exa = Exa(api_key=EXA_API_KEY)
+# Exa web search is disabled — replaced by the free Census/BLS/FRED API clients
+# which provide the same government data without per-query costs.
+exa = None
 
-llm = OpenAI(temperature=0, api_key=OPENAI_API_KEY)
+llm = ChatGroq(temperature=0, groq_api_key=GROQ_API_KEY, model_name="llama-3.3-70b-versatile") if GROQ_API_KEY else None
 
 def _extract_structured_data(content: str, query: str) -> dict:
     """
@@ -39,12 +35,17 @@ def _extract_structured_data(content: str, query: str) -> dict:
 
     JSON Output:
     """
+    if not llm:
+        logger.warning("LLM not configured. Skipping data extraction.")
+        return {}
+
     prompt = PromptTemplate(template=extraction_template, input_variables=["content", "query"])
     
     extractor_chain = prompt | llm
     
     try:
-        result_str = extractor_chain.invoke({"content": content, "query": query})
+        result = extractor_chain.invoke({"content": content, "query": query})
+        result_str = result.content if hasattr(result, "content") else str(result)
         # Clean the string to make sure it's valid JSON
         # The LLM might sometimes include markdown or other text
         json_str = result_str[result_str.find('{'):result_str.rfind('}')+1]

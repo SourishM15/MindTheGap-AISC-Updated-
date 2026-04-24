@@ -11,13 +11,13 @@ import os
 import logging
 import threading
 
-import boto3
+from supabase import create_client
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
 _ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
-load_dotenv(_ENV_PATH)
+load_dotenv(_ENV_PATH, override=True)
 
 _S3_BUCKET      = "mindthegap-gov-data"
 _S3_KEY         = "government-data/policy-database/policy_database.json"
@@ -437,12 +437,9 @@ class PolicyDatabaseLoader:
         self._db: Dict[str, Dict[str, Any]] = {}
         self._meta: Dict[str, Any] = {}
         self._loaded_at: Optional[datetime] = None
-        self._s3 = boto3.client(
-            "s3",
-            region_name=os.getenv("AWS_REGION", "us-east-2"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
+        _url = os.getenv("SUPABASE_URL")
+        _key = os.getenv("SUPABASE_KEY")
+        self._sb = create_client(_url, _key) if _url and _key else None
 
     def _is_stale(self) -> bool:
         if self._loaded_at is None:
@@ -455,17 +452,19 @@ class PolicyDatabaseLoader:
         self._loaded_at = datetime.now()
 
     def _load_from_s3(self) -> bool:
+        if not self._sb:
+            return False
         try:
-            obj = self._s3.get_object(Bucket=_S3_BUCKET, Key=_S3_KEY)
-            payload = json.loads(obj["Body"].read().decode("utf-8"))
+            raw = self._sb.storage.from_(_S3_BUCKET).download(_S3_KEY)
+            payload = json.loads(raw)
             self._parse_payload(payload)
             logger.info(
-                f"✓ PolicyDatabaseLoader: loaded {len(self._db)} policies from S3 "
+                f"✓ PolicyDatabaseLoader: loaded {len(self._db)} policies from Supabase Storage "
                 f"(v{self._meta.get('version', '?')})"
             )
             return True
         except Exception as exc:
-            logger.warning(f"PolicyDatabaseLoader: S3 load failed — {exc}")
+            logger.warning(f"PolicyDatabaseLoader: Supabase Storage load failed — {exc}")
             return False
 
     def _load_from_local(self) -> bool:
@@ -519,27 +518,20 @@ class PolicyDatabaseLoader:
         return self._load_from_s3() or self._load_from_local()
 
     def save_to_s3(self, payload: dict) -> bool:
-        """
-        Persist an updated policy payload to S3 AND refresh the in-memory cache.
-        payload schema:
-          {
-            "policy_database": { "<key>": { policy fields }, ... },
-            "metadata": { "version": "1.1", "last_updated": "YYYY-MM-DD", "description": "..." }
-          }
-        """
+        """Persist an updated policy payload to Supabase Storage AND refresh the in-memory cache."""
+        if not self._sb:
+            logger.error("PolicyDatabaseLoader: Supabase not configured — cannot save")
+            return False
         try:
             body = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
-            self._s3.put_object(
-                Bucket=_S3_BUCKET,
-                Key=_S3_KEY,
-                Body=body,
-                ContentType="application/json",
+            self._sb.storage.from_(_S3_BUCKET).upload(
+                _S3_KEY, body, file_options={"upsert": "true"}
             )
             self._parse_payload(payload)
-            logger.info(f"✓ PolicyDatabaseLoader: saved {len(self._db)} policies to S3")
+            logger.info(f"✓ PolicyDatabaseLoader: saved {len(self._db)} policies to Supabase Storage")
             return True
         except Exception as exc:
-            logger.error(f"PolicyDatabaseLoader: S3 save failed — {exc}")
+            logger.error(f"PolicyDatabaseLoader: Supabase Storage save failed — {exc}")
             return False
 
 
@@ -607,13 +599,13 @@ class PolicyRecommendationEngine:
         The LLM receives:
           - Actual government-sourced metrics for the region
           - The full POLICY_DATABASE as a reference library to cite from
-          - Optional historical policy evidence from S3 (regional_policy_history)
+          - Optional historical policy evidence from Supabase (regional_policy_history)
 
         Returns a list of structured recommendation dicts.
         """
-        api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        api_key = openai_api_key or os.getenv("GROQ_API_KEY")
         if not api_key:
-            logger.warning("No OpenAI API key — falling back to heuristic scoring")
+            logger.warning("No GROQ_API_KEY — falling back to heuristic scoring")
             return PolicyRecommendationEngine._heuristic_fallback(
                 gini_coefficient, top_1_percent_share, bottom_50_percent_share,
                 unemployment_rate, poverty_rate
@@ -637,22 +629,34 @@ class PolicyRecommendationEngine:
 {policy_history_context}
 """
 
-        prompt = f"""You are an expert economist and public policy analyst. \
-Generate exactly 5 tailored, evidence-based policy recommendations for {region_label} \
-based on the real government data below.
+        prompt = f"""You are a non-partisan economist and public policy analyst. Your only obligation is \
+economic accuracy and intellectual honesty. Generate exactly 5 tailored policy recommendations for \
+{region_label} grounded strictly in peer-reviewed research, documented historical outcomes, and \
+real government data.
 
-For EACH recommendation you MUST output a JSON object (5 total, as a JSON array) with these fields:
-  - title        : concise policy name
-  - category     : one of Education, Income Support, Wealth Building, Employment, Taxation, Healthcare, Housing, Small Business, Individual Finance
-  - description  : 2-3 sentence explanation tailored to the specific metrics below
-  - target_populations : list of 2-3 groups most helped
-  - expected_impact    : specific projected outcome referencing the actual numbers (e.g. "reduce poverty rate from 14.2% toward 10%")
+CORE INTEGRITY RULES you must follow without exception:
+1. ONLY cite real, documented programs with verifiable outcomes (name the program, jurisdiction, year, and measured result).
+2. For every recommendation include at least one documented TRADE-OFF or unintended consequence from history.
+3. If evidence is contested or mixed among mainstream economists, state that explicitly in the rationale.
+4. Do NOT cherry-pick favourable outcomes. If a comparable program failed somewhere, note it.
+5. Rate evidence_quality honestly: Strong (RCTs or large quasi-experimental studies), Moderate (observational with good controls), Mixed/Contested (significant academic disagreement).
+6. Do NOT recommend a policy because it is politically popular — only because the data supports it.
+7. Projected impacts must be grounded in measured effects of real historical precedents, not optimistic assumptions.
+
+For EACH recommendation output a JSON object (5 total, as a JSON array) with exactly these fields:
+  - title               : concise policy name
+  - category            : one of Education, Income Support, Wealth Building, Employment, Taxation, Healthcare, Housing, Small Business, Individual Finance
+  - description         : 2-3 sentences tailored to the specific metrics below referencing actual numbers
+  - target_populations  : list of 2-3 groups most affected
+  - expected_impact     : specific projected outcome citing a real historical analogue and its measured effect
+  - evidence_quality    : Strong | Moderate | Mixed/Contested
+  - known_tradeoffs     : list of 1-2 documented downsides or unintended consequences from real-world implementations
   - implementation_difficulty : Easy | Moderate | Difficult
-  - cost_estimate   : Low | Moderate | High
-  - historical_examples : list of 1-2 real precedents (cite from the reference library if applicable)
-  - success_metrics : list of 2 measurable KPIs with numeric targets
-  - rationale : 1 sentence explaining why THIS metric combination makes this policy the priority
-  - priority_score : float 1-10 reflecting urgency given the data
+  - cost_estimate       : Low | Moderate | High
+  - historical_examples : list of 2 real precedents each with program name, jurisdiction, year, and measured outcome
+  - success_metrics     : list of 2 measurable KPIs with numeric targets derived from historical analogues
+  - rationale           : 1 sentence explaining why THIS specific data combination makes this policy the priority; note if evidence is contested
+  - priority_score      : float 1-10 reflecting data-driven urgency (not political preference)
 
 === REAL GOVERNMENT DATA ({region_label}) ===
   Gini Coefficient          : {gini_coefficient:.3f}  (national avg ~0.49)
@@ -666,13 +670,13 @@ For EACH recommendation you MUST output a JSON object (5 total, as a JSON array)
 Return ONLY a valid JSON array of 5 objects. No markdown fences, no prose."""
 
         try:
-            from langchain_openai import ChatOpenAI
+            from langchain_groq import ChatGroq
             from langchain_core.messages import HumanMessage
 
-            llm = ChatOpenAI(
+            llm = ChatGroq(
                 temperature=0.3,
-                api_key=api_key,
-                model="gpt-3.5-turbo",
+                groq_api_key=api_key,
+                model_name="llama-3.3-70b-versatile",
                 max_tokens=2000,
             )
             response = llm.invoke([HumanMessage(content=prompt)])

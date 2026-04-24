@@ -8,8 +8,8 @@ import logging
 from typing import Dict, List, Optional
 from datetime import datetime
 import pandas as pd
-import boto3
 from dotenv import load_dotenv
+from supabase import create_client, Client
 
 from census_api_client import CensusAPIClient, STATE_FIPS
 from bls_api_client import BLSAPIClient
@@ -17,7 +17,7 @@ from fred_api_client import FREDAPIClient
 from city_api_client import CityAPIClient
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 # US States mapping
 STATES = {
@@ -49,11 +49,10 @@ class DataEnrichmentPipeline:
         self.bls_client = BLSAPIClient()
         self.fred_client = FREDAPIClient()
         self.city_client = CityAPIClient()
-        # S3 client
-        self.s3_client = boto3.client(
-            's3',
-            region_name=os.getenv('AWS_REGION', 'us-east-2')
-        )
+        # Supabase Storage client
+        _url = os.getenv('SUPABASE_URL')
+        _key = os.getenv('SUPABASE_KEY')
+        self._supabase: Client | None = create_client(_url, _key) if _url and _key else None
         self.bucket = 'mindthegap-gov-data'
         
         # Load existing wealth data from Supabase (mock here, replace with real)
@@ -191,37 +190,40 @@ class DataEnrichmentPipeline:
         
         return metrics
     
+    def _storage_upload(self, key: str, data: bytes) -> bool:
+        """Upload bytes to Supabase Storage (upsert)."""
+        if not self._supabase:
+            logger.warning("Supabase not configured — cannot save enriched profile")
+            return False
+        try:
+            self._supabase.storage.from_(self.bucket).upload(
+                key, data, file_options={"upsert": "true"}
+            )
+            return True
+        except Exception as e:
+            logger.error(f"Supabase Storage upload failed for '{key}': {e}")
+            return False
+
     def save_state_profile_to_s3(self, profile: Dict, state_code: str) -> bool:
-        """Save enriched state profile to S3"""
+        """Save enriched state profile to Supabase Storage."""
         try:
             state_name = profile['identity']['state_name']
             state_slug = state_name.lower().replace(' ', '-')
-            
-            # Save complete profile
-            s3_key = f"enriched-regional-data/state-profiles/{state_slug}/profile.json"
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=s3_key,
-                Body=json.dumps(profile, indent=2),
-                ContentType='application/json'
-            )
-            logger.info(f"✓ Saved: s3://{self.bucket}/{s3_key}")
-            
-            # Save individual data sections
+
+            key = f"enriched-regional-data/state-profiles/{state_slug}/profile.json"
+            ok = self._storage_upload(key, json.dumps(profile, indent=2).encode())
+            if ok:
+                logger.info(f"✓ Saved: supabase://{self.bucket}/{key}")
+
             for section in ['demographics', 'employment', 'economics', 'wealth']:
                 if profile.get(section):
-                    s3_key = f"enriched-regional-data/state-profiles/{state_slug}/{section}.json"
-                    self.s3_client.put_object(
-                        Bucket=self.bucket,
-                        Key=s3_key,
-                        Body=json.dumps(profile[section], indent=2),
-                        ContentType='application/json'
-                    )
-            
-            return True
-        
+                    sec_key = f"enriched-regional-data/state-profiles/{state_slug}/{section}.json"
+                    self._storage_upload(sec_key, json.dumps(profile[section], indent=2).encode())
+
+            return ok
+
         except Exception as e:
-            logger.error(f"Error saving to S3: {e}")
+            logger.error(f"Error saving profile: {e}")
             return False
     
     def enrich_all_states(self) -> Dict:
@@ -268,21 +270,14 @@ class DataEnrichmentPipeline:
         return results
     
     def _save_enrichment_summary(self, results: Dict) -> bool:
-        """Save pipeline execution summary to S3"""
+        """Save pipeline execution summary to Supabase Storage"""
         try:
             timestamp = datetime.now().strftime('%Y-%m-%d-%H-%M-%S')
-            s3_key = f"data-pipeline-logs/enrichment-summary-{timestamp}.json"
-            
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=s3_key,
-                Body=json.dumps(results, indent=2),
-                ContentType='application/json'
-            )
-            
-            logger.info(f"✓ Saved summary: s3://{self.bucket}/{s3_key}")
-            return True
-        
+            key = f"data-pipeline-logs/enrichment-summary-{timestamp}.json"
+            ok = self._storage_upload(key, json.dumps(results, indent=2).encode())
+            if ok:
+                logger.info(f"✓ Saved summary: supabase://{self.bucket}/{key}")
+            return ok
         except Exception as e:
             logger.error(f"Error saving summary: {e}")
             return False
@@ -303,16 +298,9 @@ class DataEnrichmentPipeline:
                 
                 # In production, load state profiles and aggregate metrics
                 region_slug = region_name.lower().replace(' ', '-')
-                s3_key = f"enriched-regional-data/regional-comparisons/{region_slug}.json"
-                
-                self.s3_client.put_object(
-                    Bucket=self.bucket,
-                    Key=s3_key,
-                    Body=json.dumps(region_data, indent=2),
-                    ContentType='application/json'
-                )
-                
-                logger.info(f"✓ Saved: s3://{self.bucket}/{s3_key}")
+                key = f"enriched-regional-data/regional-comparisons/{region_slug}.json"
+                self._storage_upload(key, json.dumps(region_data, indent=2).encode())
+                logger.info(f"✓ Saved: supabase://{self.bucket}/{key}")
             
             return True
         

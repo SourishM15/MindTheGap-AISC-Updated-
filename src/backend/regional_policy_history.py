@@ -1,15 +1,16 @@
 """
 Regional Policy History Engine
-Loads documented historical economic policies from S3 and provides
+Loads documented historical economic policies from Supabase Storage and provides
 evidence-grounded context to the chatbot.  No policy records are
-hardcoded here — update the dataset in S3 without redeploying:
+hardcoded here — update the dataset in Supabase Storage without redeploying:
 
-  S3 key : s3://mindthegap-gov-data/government-data/policy-history/regional_policy_history.json
+  Bucket : mindthegap-gov-data
+  Key    : government-data/policy-history/regional_policy_history.json
   Schema : { "region_policy_history": { <region>: [<policy>, ...] },
              "region_aliases":        { "<alias_lower>": "<region>" } }
 
 To force an in-process reload call reload_policy_data().
-To push new data to S3 and refresh call update_policy_data(payload).
+To push new data and refresh call update_policy_data(payload).
 """
 
 import os
@@ -19,14 +20,15 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
-import boto3
+import boto3  # kept for legacy reference only — not used at runtime
+from supabase import create_client
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
 # Load .env so AWS credentials are available when the module is imported
 _ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
-load_dotenv(_ENV_PATH)
+load_dotenv(_ENV_PATH, override=True)
 
 _S3_BUCKET      = "mindthegap-gov-data"
 _S3_KEY         = "government-data/policy-history/regional_policy_history.json"
@@ -63,12 +65,9 @@ class PolicyHistoryLoader:
         self._history_db: Dict[str, List[Dict[str, Any]]] = {}
         self._aliases:    Dict[str, str] = {}
         self._loaded_at:  Optional[datetime] = None
-        self._s3 = boto3.client(
-            "s3",
-            region_name=os.getenv("AWS_REGION", "us-east-2"),
-            aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-            aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-        )
+        _url = os.getenv("SUPABASE_URL")
+        _key = os.getenv("SUPABASE_KEY")
+        self._sb = create_client(_url, _key) if _url and _key else None
 
     def _is_stale(self) -> bool:
         if self._loaded_at is None:
@@ -81,17 +80,19 @@ class PolicyHistoryLoader:
         self._loaded_at  = datetime.now()
 
     def _load_from_s3(self) -> bool:
+        if not self._sb:
+            return False
         try:
-            obj = self._s3.get_object(Bucket=_S3_BUCKET, Key=_S3_KEY)
-            payload = json.loads(obj["Body"].read().decode("utf-8"))
+            raw = self._sb.storage.from_(_S3_BUCKET).download(_S3_KEY)
+            payload = json.loads(raw)
             self._parse_payload(payload)
             logger.info(
                 f"✓ PolicyHistoryLoader: loaded {len(self._history_db)} regions "
-                f"from S3 ({sum(len(v) for v in self._history_db.values())} policies)"
+                f"from Supabase Storage ({sum(len(v) for v in self._history_db.values())} policies)"
             )
             return True
         except Exception as exc:
-            logger.warning(f"PolicyHistoryLoader: S3 load failed — {exc}")
+            logger.warning(f"PolicyHistoryLoader: Supabase Storage load failed — {exc}")
             return False
 
     def _load_from_local(self) -> bool:
@@ -131,23 +132,20 @@ class PolicyHistoryLoader:
         return self._load_from_s3() or self._load_from_local()
 
     def save_to_s3(self, payload: dict) -> bool:
-        """
-        Persist an updated payload back to S3 and refresh the in-memory cache.
-        Use this to add new regions or update existing policy records at runtime.
-        """
+        """Persist an updated payload to Supabase Storage and refresh in-memory cache."""
+        if not self._sb:
+            logger.error("PolicyHistoryLoader: Supabase not configured — cannot save")
+            return False
         try:
             body = json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8")
-            self._s3.put_object(
-                Bucket=_S3_BUCKET,
-                Key=_S3_KEY,
-                Body=body,
-                ContentType="application/json",
+            self._sb.storage.from_(_S3_BUCKET).upload(
+                _S3_KEY, body, file_options={"upsert": "true"}
             )
             self._parse_payload(payload)
-            logger.info(f"✓ PolicyHistoryLoader: saved {len(self._history_db)} regions to S3")
+            logger.info(f"✓ PolicyHistoryLoader: saved {len(self._history_db)} regions to Supabase Storage")
             return True
         except Exception as exc:
-            logger.error(f"PolicyHistoryLoader: S3 save failed — {exc}")
+            logger.error(f"PolicyHistoryLoader: Supabase Storage save failed — {exc}")
             return False
 
 

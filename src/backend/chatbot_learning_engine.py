@@ -10,10 +10,11 @@ from typing import List, Dict, Tuple
 import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
-import boto3
+import boto3  # kept for legacy reference only
+from supabase import create_client
 
 logger = logging.getLogger(__name__)
-load_dotenv()
+load_dotenv(override=True)
 
 class ChatbotLearningEngine:
     """
@@ -22,7 +23,9 @@ class ChatbotLearningEngine:
     """
     
     def __init__(self):
-        self.s3_client = boto3.client('s3', region_name=os.getenv('AWS_REGION', 'us-east-2'))
+        _url = os.getenv('SUPABASE_URL')
+        _key = os.getenv('SUPABASE_KEY')
+        self._sb = create_client(_url, _key) if _url and _key else None
         self.bucket = 'mindthegap-gov-data'
         self.training_insights = []
     
@@ -223,51 +226,39 @@ class ChatbotLearningEngine:
             ]
         }
     
-    def save_training_data_to_s3(self, training_data: List[Dict]) -> bool:
-        """Save training data to S3 for chatbot fine-tuning"""
+    def _storage_upload(self, key: str, data: bytes) -> bool:
+        if not self._sb:
+            logger.warning("Supabase not configured — cannot upload training data")
+            return False
         try:
-            # Save as JSONL (one JSON object per line) for ML pipeline
-            jsonl_content = "\n".join([json.dumps(item) for item in training_data])
-            
-            s3_key = f"chatbot-training-data/regional-insights-{datetime.now().strftime('%Y-%m-%d')}.jsonl"
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=s3_key,
-                Body=jsonl_content,
-                ContentType='application/jsonl'
-            )
-            
-            logger.info(f"✓ Saved training data: s3://{self.bucket}/{s3_key}")
-            
-            # Also save as JSON for easy browsing
-            json_key = f"chatbot-training-data/regional-insights-{datetime.now().strftime('%Y-%m-%d')}.json"
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=json_key,
-                Body=json.dumps(training_data, indent=2),
-                ContentType='application/json'
-            )
-            
+            self._sb.storage.from_(self.bucket).upload(key, data, file_options={"upsert": "true"})
             return True
-        
+        except Exception as e:
+            logger.error(f"Supabase Storage upload failed for '{key}': {e}")
+            return False
+
+    def save_training_data_to_s3(self, training_data: List[Dict]) -> bool:
+        """Save training data to Supabase Storage for chatbot fine-tuning"""
+        try:
+            jsonl = "\n".join(json.dumps(item) for item in training_data).encode()
+            date_str = datetime.now().strftime('%Y-%m-%d')
+            ok = self._storage_upload(f"chatbot-training-data/regional-insights-{date_str}.jsonl", jsonl)
+            self._storage_upload(
+                f"chatbot-training-data/regional-insights-{date_str}.json",
+                json.dumps(training_data, indent=2).encode()
+            )
+            return ok
         except Exception as e:
             logger.error(f"Error saving training data: {e}")
             return False
-    
+
     def save_correlation_patterns_to_s3(self, patterns: List[Dict]) -> bool:
-        """Save correlation patterns to S3"""
+        """Save correlation patterns to Supabase Storage"""
         try:
-            s3_key = f"chatbot-training-data/economic-correlations.json"
-            self.s3_client.put_object(
-                Bucket=self.bucket,
-                Key=s3_key,
-                Body=json.dumps(patterns, indent=2),
-                ContentType='application/json'
+            return self._storage_upload(
+                "chatbot-training-data/economic-correlations.json",
+                json.dumps(patterns, indent=2).encode()
             )
-            
-            logger.info(f"✓ Saved patterns: s3://{self.bucket}/{s3_key}")
-            return True
-        
         except Exception as e:
             logger.error(f"Error saving patterns: {e}")
             return False
@@ -376,13 +367,8 @@ Always cite regional data and be specific about geographic patterns."""
         # Create knowledge base
         logger.info("  Creating knowledge base...")
         kb = self.create_knowledge_base()
-        kb_key = f"chatbot-training-data/knowledge-base.json"
-        self.s3_client.put_object(
-            Bucket=self.bucket,
-            Key=kb_key,
-            Body=json.dumps(kb, indent=2),
-            ContentType='application/json'
-        )
+        kb_key = "chatbot-training-data/knowledge-base.json"
+        self._storage_upload(kb_key, json.dumps(kb, indent=2).encode())
         results['components']['knowledge_base'] = {
             'status': 'saved',
             'key': kb_key
