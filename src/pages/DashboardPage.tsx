@@ -8,7 +8,7 @@ const DashboardPage: React.FC = () => {
   const [filters, setFilters] = useState<FilterState>({
     region: 'us',
     timeframe: 'current',
-    metrics: ['gini', 'income-ratio', 'poverty-rate', 'wealth-top1'],
+    metrics: ['population', 'median-income', 'poverty-rate', 'education', 'unemployment', 'gini', 'income-ratio', 'wealth-top1'],
     yearRange: [2000, 2035]
   });
 

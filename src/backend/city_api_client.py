@@ -134,6 +134,160 @@ class CityAPIClient:
         except Exception as e:
             logger.error(f"Error fetching metro demographics for {metro_name}: {e}")
             return None
+
+    def get_metro_income_distribution(self, metro_name: str, year: Optional[int] = None) -> Optional[Dict]:
+        """
+        Fetch metro-level income distribution for Lorenz and waffle charts.
+
+        Uses ACS variables:
+          - B19083_001E (Gini)
+          - B19013_001E (median household income)
+          - B19001_001E and B19001_002E..017E (income brackets)
+        """
+        if not self.census_api_key:
+            logger.warning(f"No Census API key - cannot fetch income distribution for {metro_name}")
+            return None
+
+        metro = self.metro_areas.get(metro_name)
+        if not metro:
+            logger.warning(f"Metro area {metro_name} not in database")
+            return None
+
+        # ACS income bracket variables with midpoint assumptions
+        brackets = [
+            ("B19001_002E", "< $10k", 5_000),
+            ("B19001_003E", "$10-15k", 12_500),
+            ("B19001_004E", "$15-20k", 17_500),
+            ("B19001_005E", "$20-25k", 22_500),
+            ("B19001_006E", "$25-30k", 27_500),
+            ("B19001_007E", "$30-35k", 32_500),
+            ("B19001_008E", "$35-40k", 37_500),
+            ("B19001_009E", "$40-45k", 42_500),
+            ("B19001_010E", "$45-50k", 47_500),
+            ("B19001_011E", "$50-60k", 55_000),
+            ("B19001_012E", "$60-75k", 67_500),
+            ("B19001_013E", "$75-100k", 87_500),
+            ("B19001_014E", "$100-125k", 112_500),
+            ("B19001_015E", "$125-150k", 137_500),
+            ("B19001_016E", "$150-200k", 175_000),
+            ("B19001_017E", "$200k+", 350_000),
+        ]
+
+        vars_needed = ["B19083_001E", "B19001_001E", "B19013_001E"] + [b[0] for b in brackets]
+
+        try:
+            default_year = 2021
+            if year is None:
+                year_candidates = [default_year, max(1989, default_year - 1)]
+            else:
+                start_year = year if year <= 2025 else 2025
+                year_candidates = list(range(start_year, 1988, -1))[:35]
+                if default_year not in year_candidates:
+                    year_candidates.append(default_year)
+
+            rows = None
+            resolved_year = None
+            for y in year_candidates:
+                try:
+                    url = f"https://api.census.gov/data/{y}/acs/acs5"
+                    params = {
+                        "get": ",".join(vars_needed),
+                        "for": f"metropolitan statistical area/micropolitan statistical area:{metro['fips']}",
+                        "key": self.census_api_key,
+                    }
+                    response = requests.get(url, params=params, timeout=10)
+                    response.raise_for_status()
+                    candidate_rows = response.json()
+                    if len(candidate_rows) >= 2:
+                        rows = candidate_rows
+                        resolved_year = y
+                        break
+                except Exception:
+                    continue
+
+            if not rows or resolved_year is None:
+                return None
+
+            header, row = rows[0], rows[1]
+            record = dict(zip(header, row))
+
+            def safe_int(val):
+                try:
+                    v = int(val)
+                    return v if v >= 0 else 0
+                except (TypeError, ValueError):
+                    return 0
+
+            def safe_float(val):
+                try:
+                    return float(val)
+                except (TypeError, ValueError):
+                    return None
+
+            gini = safe_float(record.get("B19083_001E"))
+            total_hh = safe_int(record.get("B19001_001E")) or 1
+            median_income = safe_float(record.get("B19013_001E"))
+
+            counts = [safe_int(record.get(b[0])) for b in brackets]
+            labels = [b[1] for b in brackets]
+            midpoints = [b[2] for b in brackets]
+
+            total_income = sum(c * m for c, m in zip(counts, midpoints)) or 1
+
+            # Lorenz points
+            cum_pop = 0.0
+            cum_inc = 0.0
+            lorenz_data = [{"bracket": "Origin", "cumulativePopulation": 0.0, "cumulativeWealth": 0.0, "percentage": 0.0}]
+            for label, count, midpoint in zip(labels, counts, midpoints):
+                pop_share = (count / total_hh) * 100
+                inc_share = (count * midpoint / total_income) * 100
+                cum_pop += pop_share
+                cum_inc += inc_share
+                lorenz_data.append({
+                    "bracket": label,
+                    "cumulativePopulation": round(cum_pop, 2),
+                    "cumulativeWealth": round(cum_inc, 2),
+                    "percentage": round(inc_share, 2),
+                })
+
+            # 6-bucket waffle aggregation
+            waffle_colors = ["#ef4444", "#f97316", "#eab308", "#22c55e", "#0ea5e9", "#3b82f6"]
+            waffle_names = ["Bottom 20%", "20-40%", "40-60%", "60-80%", "80-95%", "Top 5%"]
+            waffle_thresholds = [20, 40, 60, 80, 95, 100]
+
+            group_incomes = [0.0] * 6
+            cum_pop2 = 0.0
+            for count, midpoint in zip(counts, midpoints):
+                pop_share = (count / total_hh) * 100
+                inc_share = (count * midpoint / total_income) * 100
+                cum_pop2 += pop_share
+                for gi, threshold in enumerate(waffle_thresholds):
+                    if cum_pop2 <= threshold or gi == 5:
+                        group_incomes[gi] += inc_share
+                        break
+
+            waffle_data = [
+                {"bracket": name, "percentage": round(group_incomes[i], 1), "color": waffle_colors[i]}
+                for i, name in enumerate(waffle_names)
+                if group_incomes[i] > 0
+            ]
+
+            return {
+                "metro": metro_name,
+                "metro_fips": metro["fips"],
+                "gini_coefficient": gini,
+                "median_household_income": median_income,
+                "lorenz_data": lorenz_data,
+                "waffle_data": waffle_data,
+                "source": "Census ACS B19001/B19083 (metro)",
+                "year": resolved_year,
+                "requested_year": year,
+                "state_specific": False,
+                "metro_specific": True,
+            }
+        except Exception as e:
+            logger.error(f"Error fetching metro income distribution for {metro_name}: {e}")
+            return None
     
     def get_metro_unemployment(self, metro_name: str) -> Optional[Dict]:
         """

@@ -45,7 +45,7 @@ def main():
         try:
             df = pd.read_csv(io.BytesIO(content))
             if 'Date' in df.columns:
-                latest = sorted(df['Date'].unique())[-1]
+                latest = max(df['Date'].unique())
             else:
                 latest = 'unknown'
             rows = len(df)

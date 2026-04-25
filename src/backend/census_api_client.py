@@ -25,9 +25,10 @@ class CensusAPIClient:
             logger.warning("CENSUS_API_KEY not found. Census data will be unavailable.")
             logger.info("Get free key at: https://api.census.gov/data/key_signup.html")
     
-    def get_url(self, variables: str, geo: str) -> str:
+    def get_url(self, variables: str, geo: str, year: Optional[int] = None) -> str:
         """Build Census API URL"""
-        return f"{self.BASE_URL}/{self.YEAR}/{self.DATASET}?get={variables}&for={geo}&key={self.api_key}"
+        target_year = str(year) if year is not None else self.YEAR
+        return f"{self.BASE_URL}/{target_year}/{self.DATASET}?get={variables}&for={geo}&key={self.api_key}"
     
     def get_state_demographics(self, state_fips: str) -> Dict:
         """
@@ -146,7 +147,7 @@ class CensusAPIClient:
             'year': 2022
         }
     
-    def get_state_income_distribution(self, state_fips: str) -> Dict:
+    def get_state_income_distribution(self, state_fips: str, year: Optional[int] = None) -> Dict:
         """
         Fetch state-level income distribution for Lorenz curve and Gini coefficient.
 
@@ -184,11 +185,31 @@ class CensusAPIClient:
             if not self.api_key:
                 return {}
 
-            url = self.get_url(",".join(vars_needed), f"state:{state_fips}")
-            resp = requests.get(url, timeout=10)
-            resp.raise_for_status()
-            rows = resp.json()
-            if len(rows) < 2:
+            default_year = int(self.YEAR)
+            if year is None:
+                year_candidates = [default_year, max(2000, default_year - 1)]
+            else:
+                start_year = year if year <= default_year else default_year
+                year_candidates = list(range(start_year, 1988, -1))[:35]
+                if default_year not in year_candidates:
+                    year_candidates.append(default_year)
+
+            rows = None
+            resolved_year = None
+            for y in year_candidates:
+                try:
+                    url = self.get_url(",".join(vars_needed), f"state:{state_fips}", year=y)
+                    resp = requests.get(url, timeout=10)
+                    resp.raise_for_status()
+                    candidate_rows = resp.json()
+                    if len(candidate_rows) >= 2:
+                        rows = candidate_rows
+                        resolved_year = y
+                        break
+                except Exception:
+                    continue
+
+            if not rows or resolved_year is None:
                 return {}
 
             header, row = rows[0], rows[1]
@@ -260,7 +281,8 @@ class CensusAPIClient:
                 "lorenz_data": lorenz_data,
                 "waffle_data": waffle_data,
                 "source": "Census ACS B19001/B19083",
-                "year": int(self.YEAR),
+                "year": resolved_year,
+                "requested_year": year,
             }
 
         except Exception as e:

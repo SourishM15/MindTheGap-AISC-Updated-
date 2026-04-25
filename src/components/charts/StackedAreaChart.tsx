@@ -33,6 +33,17 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
 }) => {
   const [hiddenDeciles, setHiddenDeciles] = useState<Set<string>>(new Set());
 
+  const latest = data.length ? data[data.length - 1] : null;
+  const first = data.length ? data[0] : null;
+  const latestTop1 = latest && typeof latest['Top 1%'] === 'number' ? latest['Top 1%'] : null;
+  const latestBottom20 = latest && typeof latest['Bottom 20%'] === 'number' ? latest['Bottom 20%'] : null;
+  const concentrationRatio = latestTop1 != null && latestBottom20 != null && latestBottom20 > 0
+    ? latestTop1 / latestBottom20
+    : null;
+  const topBandLatest = latest && typeof latest['80-99%'] === 'number' && latestTop1 != null
+    ? latest['80-99%'] + latestTop1
+    : null;
+
   const toggleDecile = (decile: string) => {
     const newHidden = new Set(hiddenDeciles);
     if (newHidden.has(decile)) {
@@ -53,9 +64,27 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
   };
 
   return (
-    <div className="w-full h-full bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="w-full h-full bg-gradient-to-br from-white to-slate-50 dark:from-gray-800 dark:to-slate-900 rounded-xl shadow-md p-6 border border-slate-200/80 dark:border-slate-700/60">
       <div className="mb-4">
         <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">{title}</h3>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+          <div className="p-3 rounded-lg bg-blue-50/90 dark:bg-blue-900/40 border border-blue-200/60 dark:border-blue-700/50">
+            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Latest Year</p>
+            <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{latest ? latest.year : 'N/A'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{data.length > 3 ? 'Trend series' : 'Snapshot view'}</p>
+          </div>
+          <div className="p-3 rounded-lg bg-amber-50/90 dark:bg-amber-900/40 border border-amber-200/60 dark:border-amber-700/50">
+            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top 20% Share</p>
+            <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{topBandLatest != null ? `${topBandLatest.toFixed(1)}%` : 'N/A'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">80-99% + Top 1%</p>
+          </div>
+          <div className="p-3 rounded-lg bg-rose-50/90 dark:bg-rose-900/40 border border-rose-200/60 dark:border-rose-700/50">
+            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top1 / Bottom20 Ratio</p>
+            <p className="text-2xl font-bold text-rose-700 dark:text-rose-300">{concentrationRatio != null ? `${concentrationRatio.toFixed(1)}x` : 'N/A'}</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Higher means more concentration</p>
+          </div>
+        </div>
         
         {/* Decile Legend with Toggle */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 mb-4">
@@ -93,7 +122,7 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
 
       <ResponsiveContainer width="100%" height={400}>
         <AreaChart data={data} margin={{ top: 10, right: 30, left: 0, bottom: 10 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+          <CartesianGrid strokeDasharray="2 4" stroke="#94a3b8" opacity={0.35} />
           <XAxis 
             dataKey="year" 
             stroke="#6b7280"
@@ -111,6 +140,7 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
               color: '#e5e7eb'
             }}
             formatter={(value) => typeof value === 'number' ? value.toFixed(1) + '%' : value}
+            labelFormatter={(value) => `Year: ${value}`}
           />
           
           {/* Render areas for each non-hidden decile */}
@@ -125,8 +155,9 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
                 stackId="1"
                 stroke={DECILE_COLORS[decile as keyof typeof DECILE_COLORS]}
                 fill={DECILE_COLORS[decile as keyof typeof DECILE_COLORS]}
-                fillOpacity={0.7}
+                fillOpacity={0.82}
                 name={decile}
+                activeDot={{ r: 4 }}
               />
             );
           })}

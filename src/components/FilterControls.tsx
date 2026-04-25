@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { FilterState } from '../types';
 import { Sliders, Calendar, MapPin, LineChart, ChevronDown } from 'lucide-react';
 import { US_STATES, MAJOR_METRO_AREAS } from '../data/states';
@@ -19,14 +19,40 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   const [showStateDropdown, setShowStateDropdown] = useState(false);
   const [showMetroDropdown, setShowMetroDropdown] = useState(false);
 
+  const metroOptions = MAJOR_METRO_AREAS.map((metro) => {
+    if (metro === 'New York' || metro === 'Washington') {
+      return {
+        value: `${metro} Metro`,
+        label: `${metro} (Metro)`
+      };
+    }
+    return { value: metro, label: metro };
+  });
+
+  const isMetroSelection = MAJOR_METRO_AREAS.includes(selectedRegion) || selectedRegion.endsWith(' Metro');
+  const isUnitedStates = selectedRegion === 'United States';
+
+  const getYearBounds = (timeframe: FilterState['timeframe']): [number, number] => {
+    if (timeframe === 'current') return [2019, 2025];
+    if (timeframe === 'forecast') return [2024, 2035];
+    // Historical:
+    // - US uses DFA history (1989+)
+    // - state/metro use ACS; ACS resolves to earliest available (~2005), but allow 1989 requests
+    return [1989, 2023];
+  };
+
+  useEffect(() => {
+    const [minYear, maxYear] = getYearBounds(filters.timeframe);
+    const nextStart = Math.max(minYear, Math.min(maxYear, filters.yearRange[0]));
+    const nextEnd = Math.max(nextStart, Math.min(maxYear, filters.yearRange[1]));
+    if (nextStart !== filters.yearRange[0] || nextEnd !== filters.yearRange[1]) {
+      onFilterChange({ yearRange: [nextStart, nextEnd] });
+    }
+  }, [selectedRegion, filters.timeframe]);
+
   const handleTimeframeChange = (timeframe: FilterState['timeframe']) => {
     // Reset year range based on timeframe
-    let yearRange: [number, number] = [2000, 2026];
-    if (timeframe === 'historical') {
-      yearRange = [2000, 2019];
-    } else if (timeframe === 'forecast') {
-      yearRange = [2020, 2026];
-    }
+    const yearRange = getYearBounds(timeframe);
     onFilterChange({ timeframe, yearRange });
   };
 
@@ -43,12 +69,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
     const newYearRange = [...filters.yearRange] as [number, number];
     
     // Get min and max years based on timeframe
-    let [minYear, maxYear] = [2000, 2026];
-    if (filters.timeframe === 'historical') {
-      [minYear, maxYear] = [2000, 2019];
-    } else if (filters.timeframe === 'forecast') {
-      [minYear, maxYear] = [2020, 2026];
-    }
+    const [minYear, maxYear] = getYearBounds(filters.timeframe);
 
     // Ensure value is within bounds
     const boundedValue = Math.max(minYear, Math.min(maxYear, value));
@@ -66,16 +87,18 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
   const metricOptions = [
     { id: 'population', label: 'Population' },
-    { id: 'median-income', label: 'Median Income' }
+    { id: 'median-income', label: 'Median Income' },
+    { id: 'poverty-rate', label: 'Poverty Rate' },
+    { id: 'education', label: "Bachelor's+ Education" },
+    { id: 'unemployment', label: 'Unemployment' },
+    { id: 'child-poverty', label: 'Child Poverty' },
+    { id: 'gini', label: 'Gini / Lorenz' },
+    { id: 'income-ratio', label: 'Income Ratio Lens' },
+    { id: 'wealth-top1', label: 'Distribution Charts' }
   ];
 
   // Get min and max years based on timeframe
-  let [minYear, maxYear] = [2000, 2026];
-  if (filters.timeframe === 'historical') {
-    [minYear, maxYear] = [2000, 2019];
-  } else if (filters.timeframe === 'forecast') {
-    [minYear, maxYear] = [2020, 2026];
-  }
+  const [minYear, maxYear] = getYearBounds(filters.timeframe);
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
@@ -146,7 +169,7 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                 setShowStateDropdown(false);
               }}
               className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
-                MAJOR_METRO_AREAS.includes(selectedRegion)
+                isMetroSelection
                   ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
               }`}
@@ -156,18 +179,18 @@ const FilterControls: React.FC<FilterControlsProps> = ({
             </button>
             {showMetroDropdown && (
               <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-40 max-h-64 overflow-y-auto">
-                {MAJOR_METRO_AREAS.map((metro) => (
+                {metroOptions.map((metro) => (
                   <button
-                    key={metro}
+                    key={metro.value}
                     onClick={() => {
-                      onRegionChange?.(metro);
+                      onRegionChange?.(metro.value);
                       setShowMetroDropdown(false);
                     }}
                     className={`w-full text-left px-4 py-2 hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${
-                      selectedRegion === metro ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                      selectedRegion === metro.value ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
                     }`}
                   >
-                    {metro}
+                    {metro.label}
                   </button>
                 ))}
               </div>

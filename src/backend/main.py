@@ -3,9 +3,10 @@ import re
 import logging
 import json
 import secrets
+from datetime import datetime
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException, Header, Depends
-from typing import Optional
+from fastapi import FastAPI, HTTPException, Header, Depends, Query
+from typing import Optional, Annotated
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
@@ -46,6 +47,7 @@ load_dotenv(override=True)
 
 # Set up Groq API key
 groq_api_key = os.getenv("GROQ_API_KEY")
+GROQ_MODEL = "llama-3.3-70b-versatile"
 if not groq_api_key:
     logger.warning("GROQ_API_KEY not found in .env file. Please add it.")
 
@@ -118,7 +120,7 @@ def load_enrichment_knowledge_base():
             'status': 'unavailable'
         }
 
-def load_enriched_state_profile(state_name: str) -> dict:
+def load_enriched_state_profile(state_name: str) -> Optional[dict]:
     """Load enriched profile for a specific state from Supabase Storage"""
     try:
         from supabase_db import supabase_client
@@ -133,7 +135,7 @@ def load_enriched_state_profile(state_name: str) -> dict:
         logger.warning(f"Could not load enriched state profile for {state_name}: {e}")
         return None
 
-def load_enriched_metro_profile(metro_name: str) -> dict:
+def load_enriched_metro_profile(metro_name: str) -> Optional[dict]:
     """Load enriched profile for a specific metro area from Supabase Storage"""
     try:
         from supabase_db import supabase_client
@@ -207,7 +209,7 @@ CONVERSATION_MANAGER = ConversationContextManager()
 logger.info("✓ Conversation context manager initialized")
 
 # --- Data Loading (from Supabase or CSV fallback) ---
-from supabase_db import get_db
+from supabase_db import get_db, supabase_client
 
 def load_data_and_create_graph():
     """Loads data from Supabase (or CSV fallback) and creates a graph."""
@@ -311,7 +313,7 @@ else:
 # --- LangChain and RAG Setup ---
 def setup_llm_chain():
     """Sets up the LangChain runnable sequence for enhanced question answering."""
-    llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name="llama-3.3-70b-versatile")
+    llm = ChatGroq(temperature=0.2, groq_api_key=groq_api_key, model_name=GROQ_MODEL)
     
     template = """You are a non-partisan AI analyst for MindTheGap, a project dedicated to economic honesty and data integrity. You specialise in US wealth inequality analysis using real government data.
 
@@ -632,7 +634,7 @@ Response:"""
             llm = ChatGroq(
                 temperature=0.7,
                 groq_api_key=groq_api_key,
-                model_name="llama-3.3-70b-versatile",
+                model_name=GROQ_MODEL,
                 max_tokens=150
             )
             response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -724,7 +726,7 @@ Articulate Comparison:"""
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
-                    model_name="llama-3.3-70b-versatile",
+                    model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -817,7 +819,7 @@ Natural Analysis:"""
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
-                    model_name="llama-3.3-70b-versatile",
+                    model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -885,7 +887,7 @@ Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag c
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
-                    model_name="llama-3.3-70b-versatile",
+                    model_name=GROQ_MODEL,
                     max_tokens=700,
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -970,7 +972,7 @@ Natural Analysis:"""
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
-                    model_name="llama-3.3-70b-versatile",
+                    model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -1040,7 +1042,7 @@ Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag c
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
-                    model_name="llama-3.3-70b-versatile",
+                    model_name=GROQ_MODEL,
                     max_tokens=700,
                 )
                 response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -1112,7 +1114,7 @@ Answer:"""
         llm = ChatGroq(
             temperature=0.3,
             groq_api_key=groq_api_key,
-            model_name="llama-3.3-70b-versatile",
+            model_name=GROQ_MODEL,
             max_tokens=max_tokens,
         )
         response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
@@ -1415,8 +1417,13 @@ async def get_state_indicators(state: str):
 async def sync_government_data_endpoint(_: None = Depends(_require_admin)):
     """Trigger government data sync (admin endpoint)"""
     try:
-        from sync_government_data import sync_all
-        
+        # Optional module: keep runtime-safe even if sync script is absent.
+        import importlib
+        sync_module = importlib.import_module("sync_government_data")
+        sync_all = getattr(sync_module, "sync_all", None)
+        if not callable(sync_all):
+            raise RuntimeError("sync_government_data.sync_all not available")
+
         success = sync_all()
         
         return {
@@ -1546,7 +1553,7 @@ async def get_s3_stats():
 
 # --- Enriched Regional Data Endpoints ---
 @app.get("/api/saipe-state/{state_name}")
-async def get_saipe_state(state_name: str, start_year: int = 2000):
+async def get_saipe_state(state_name: str, start_year: int = 1989):
     """
     Return Census SAIPE income & poverty data for a specific state.
     Includes a current snapshot (latest year) and a time series from start_year.
@@ -1574,7 +1581,10 @@ async def get_saipe_state(state_name: str, start_year: int = 2000):
 
 
 @app.get("/api/income-lorenz/{state_name}")
-async def get_income_lorenz(state_name: str):
+async def get_income_lorenz(
+    state_name: str,
+    year: Annotated[Optional[int], Query(ge=1989, le=2035)] = None,
+):
     """
     Return state-specific income distribution (Lorenz curve + Gini + waffle data)
     built from Census ACS B19001 income bracket counts and B19083 Gini coefficient.
@@ -1594,19 +1604,53 @@ async def get_income_lorenz(state_name: str):
                 "data": None,
             }
 
-        data = census_client.get_state_income_distribution(fips)
+        data = census_client.get_state_income_distribution(fips, year=year)
         if not data:
             return {"success": False, "error": f"No income distribution data for {state_name}"}
 
         return {
             "success": True,
             "state": state_name,
+            "requested_year": year,
             "source": data.get("source", "Census ACS"),
             "state_specific": True,
             "data": data,
         }
     except Exception as e:
         logger.error(f"Income Lorenz error for {state_name}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@app.get("/api/income-lorenz-metro/{metro_name}")
+async def get_income_lorenz_metro(
+    metro_name: str,
+    year: Annotated[Optional[int], Query(ge=1989, le=2035)] = None,
+):
+    """
+    Return metro-specific income distribution (Lorenz + waffle + Gini)
+    from Census ACS metro-level income bracket tables.
+    """
+    try:
+        if metro_name not in city_client.metro_areas:
+            raise HTTPException(status_code=404, detail=f"Metro area not found: {metro_name}")
+
+        data = city_client.get_metro_income_distribution(metro_name, year=year)
+        if not data:
+            return {"success": False, "error": f"No income distribution data for {metro_name}"}
+
+        return {
+            "success": True,
+            "metro": metro_name,
+            "requested_year": year,
+            "source": data.get("source", "Census ACS (metro)"),
+            "state_specific": False,
+            "metro_specific": True,
+            "data": data,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Metro income Lorenz error for {metro_name}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
@@ -2029,7 +2073,7 @@ async def get_wealth_distribution():
             fred = FREDAPIClient()
             gini_series = fred._get_series_data('SIPOVGINIUSA', 5)
             if gini_series and gini_series.get('data'):
-                latest_gini_key = sorted(gini_series['data'].keys())[-1]
+                latest_gini_key = max(gini_series['data'].keys())
                 gini = round(gini_series['data'][latest_gini_key] / 100, 4)  # FRED stores as 0-100
         except Exception:
             pass  # fall back to derived gini

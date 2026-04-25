@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { FilterState } from '../types';
 import { MAJOR_METRO_AREAS } from '../data/states';
 import LorenzCurve from './charts/LorenzCurve';
@@ -47,7 +47,9 @@ interface IncomeLorenzData {
   waffle_data: { bracket: string; percentage: number; color: string }[];
   source: string;
   year: number;
+  requested_year?: number | null;
   state_specific: boolean;
+  metro_specific?: boolean;
 }
 
 interface SAIPESnapshot {
@@ -100,10 +102,16 @@ const METRO_TO_STATE: Record<string, string> = {
   'Washington':   'District of Columbia',
 };
 
+const METRO_REGION_ALIASES: Record<string, string> = {
+  'New York Metro': 'New York',
+  'Washington Metro': 'Washington',
+};
+
 const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, selectedRegion = 'United States' }) => {
-  // A region is metro only if it's in MAJOR_METRO_AREAS but NOT also a US state name.
-  // "Washington" and "New York" appear in both — treat them as states to avoid wrong routing.
-  const isMetro = MAJOR_METRO_AREAS.includes(selectedRegion) && !(['Washington', 'New York'].includes(selectedRegion));
+  const canonicalRegion = METRO_REGION_ALIASES[selectedRegion] ?? selectedRegion;
+  const isForcedMetro = selectedRegion.endsWith(' Metro');
+  // A region is metro if explicitly selected as metro alias, or if it is a non-ambiguous metro name.
+  const isMetro = isForcedMetro || (MAJOR_METRO_AREAS.includes(canonicalRegion) && !(['Washington', 'New York'].includes(canonicalRegion)));
 
   const [regionData, setRegionData] = useState<RegionData | null>(null);
   const [wealthData, setWealthData] = useState<WealthDistributionData | null>(null);
@@ -112,7 +120,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [visualizationType, setVisualizationType] = useState<VisualizationType>('overview');
+  const incomeCacheRef = useRef<Record<string, IncomeLorenzData>>({});
+  const incomeSeriesCacheRef = useRef<Record<string, Record<number, IncomeLorenzData>>>({});
 
+  // Base data for cards + national DFA should only refetch when region changes.
   useEffect(() => {
     let cancelled = false;
 
@@ -123,16 +134,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       setSaipeData(null);
       setIncomeDistData(null);
       try {
-        const stateForRegion = isMetro ? (METRO_TO_STATE[selectedRegion] ?? selectedRegion) : selectedRegion;
+        const stateForRegion = isMetro ? (METRO_TO_STATE[canonicalRegion] ?? canonicalRegion) : canonicalRegion;
         const enrichedEndpoint = isMetro
-          ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(selectedRegion)}`
-          : `http://localhost:8000/api/enriched-state/${selectedRegion}`;
+          ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(canonicalRegion)}`
+          : `http://localhost:8000/api/enriched-state/${canonicalRegion}`;
 
-        const [regionRes, wealthRes, saipeRes, incomeRes] = await Promise.all([
+        const [regionRes, wealthRes, saipeRes] = await Promise.all([
           fetch(enrichedEndpoint),
           fetch('http://localhost:8000/api/wealth-distribution'),
           fetch(`http://localhost:8000/api/saipe-state/${stateForRegion}`),
-          fetch(`http://localhost:8000/api/income-lorenz/${stateForRegion}`),
         ]);
 
         if (cancelled) return;
@@ -158,18 +168,6 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           if (cancelled) return;
           if (sData.success) setSaipeData(sData);
         }
-
-        if (incomeRes.ok) {
-          const iData = await incomeRes.json();
-          if (cancelled) return;
-          // Only use state-specific income distribution for states, not metros.
-          // For metros, the endpoint returns the *parent state's* data (e.g. California
-          // for Los Angeles) which would mislabel state numbers as metro numbers in
-          // Lorenz / Waffle charts. Fall back to national DFA data instead.
-          if (!isMetro && iData.success && iData.state_specific && iData.data) {
-            setIncomeDistData({ ...iData.data, state_specific: true });
-          }
-        }
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Error fetching data');
@@ -181,7 +179,133 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
     fetchRegionData();
 
     return () => { cancelled = true; };
-  }, [selectedRegion]);
+  }, [selectedRegion, canonicalRegion, isMetro]);
+
+  // Warm a yearly income-distribution cache (1989-2023) per region so time slider updates
+  // are driven by real annual snapshots instead of repeating one point.
+  useEffect(() => {
+    const needsIncomeData = visualizationType === 'lorenz' || visualizationType === 'waffle' || visualizationType === 'stacked';
+    const needsSeries = needsIncomeData && (filters.timeframe === 'historical' || filters.timeframe === 'forecast');
+    if (!needsSeries) return;
+
+    const seriesKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}`;
+    const existing = incomeSeriesCacheRef.current[seriesKey] ?? {};
+    const targetYears: number[] = [];
+    for (let y = 1989; y <= 2023; y++) {
+      if (!existing[y]) targetYears.push(y);
+    }
+    if (!targetYears.length) return;
+
+    let cancelled = false;
+
+    const fetchYear = async (year: number): Promise<void> => {
+      const stateForRegion = isMetro ? (METRO_TO_STATE[canonicalRegion] ?? canonicalRegion) : canonicalRegion;
+      const endpoint = isMetro
+        ? `http://localhost:8000/api/income-lorenz-metro/${encodeURIComponent(canonicalRegion)}?year=${year}`
+        : `http://localhost:8000/api/income-lorenz/${stateForRegion}?year=${year}`;
+
+      const res = await fetch(endpoint);
+      if (cancelled || !res.ok) return;
+      const payload = await res.json();
+      if (cancelled || !payload.success || !payload.data?.year) return;
+
+      const normalized: IncomeLorenzData = {
+        ...payload.data,
+        state_specific: !!payload.state_specific,
+        metro_specific: !!payload.metro_specific,
+      };
+
+      if (!incomeSeriesCacheRef.current[seriesKey]) incomeSeriesCacheRef.current[seriesKey] = {};
+      incomeSeriesCacheRef.current[seriesKey][normalized.year] = normalized;
+      const pointCacheKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}:${normalized.year}`;
+      incomeCacheRef.current[pointCacheKey] = normalized;
+    };
+
+    const prefetch = async () => {
+      const chunkSize = 4;
+      for (let i = 0; i < targetYears.length; i += chunkSize) {
+        if (cancelled) return;
+        const chunk = targetYears.slice(i, i + chunkSize);
+        await Promise.all(chunk.map(fetchYear));
+      }
+    };
+
+    prefetch().catch(() => {
+      // Keep UI functional with on-demand point fetches even if warmup is partial.
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedRegion, canonicalRegion, filters.timeframe, visualizationType, isMetro]);
+
+  // Income distribution (Lorenz/Waffle/region-stacked) is year-sensitive and can be cached/debounced.
+  useEffect(() => {
+    const needsIncomeData = visualizationType === 'lorenz' || visualizationType === 'waffle' || visualizationType === 'stacked';
+    if (!needsIncomeData) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const requestedIncomeYearRaw =
+          filters.timeframe === 'historical' || filters.timeframe === 'forecast'
+            ? filters.yearRange[1]
+            : null;
+        const requestedIncomeYear = requestedIncomeYearRaw == null
+          ? null
+          : Math.max(1989, Math.min(2035, requestedIncomeYearRaw));
+
+        const seriesKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}`;
+        if (requestedIncomeYear != null) {
+          const yearlyCached = incomeSeriesCacheRef.current[seriesKey]?.[requestedIncomeYear];
+          if (yearlyCached) {
+            setIncomeDistData(yearlyCached);
+            return;
+          }
+        }
+
+        const stateForRegion = isMetro ? (METRO_TO_STATE[canonicalRegion] ?? canonicalRegion) : canonicalRegion;
+        const endpoint = isMetro
+          ? `http://localhost:8000/api/income-lorenz-metro/${encodeURIComponent(canonicalRegion)}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`
+          : `http://localhost:8000/api/income-lorenz/${stateForRegion}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`;
+
+        const cacheKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}:${requestedIncomeYear ?? 'latest'}`;
+        const cached = incomeCacheRef.current[cacheKey];
+        if (cached) {
+          setIncomeDistData(cached);
+          return;
+        }
+
+        const incomeRes = await fetch(endpoint);
+        if (cancelled) return;
+        if (!incomeRes.ok) {
+          setIncomeDistData(null);
+          return;
+        }
+        const iData = await incomeRes.json();
+        if (cancelled) return;
+
+        if (iData.success && iData.data) {
+          const normalized: IncomeLorenzData = {
+            ...iData.data,
+            state_specific: !!iData.state_specific,
+            metro_specific: !!iData.metro_specific,
+          };
+          incomeCacheRef.current[cacheKey] = normalized;
+          setIncomeDistData(normalized);
+        } else {
+          setIncomeDistData(null);
+        }
+      } catch {
+        setIncomeDistData(null);
+      }
+    }, 250);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [selectedRegion, canonicalRegion, filters.timeframe, filters.yearRange, visualizationType, isMetro]);
 
   if (loading) {
     return (
@@ -215,17 +339,51 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
   const latestUnemploymentRate = unemploymentData[Object.keys(unemploymentData).sort().pop() as string];
 
   const saipeRegionLabel = isMetro
-    ? (saipeData?.snapshot?.state_name ?? METRO_TO_STATE[selectedRegion] ?? selectedRegion)
-    : selectedRegion;
+    ? (saipeData?.snapshot?.state_name ?? METRO_TO_STATE[canonicalRegion] ?? canonicalRegion)
+    : canonicalRegion;
+
+  const metricEnabled = (metricId: string) => {
+    // If user deselects everything, show all by default to avoid an empty dashboard.
+    if (!filters.metrics || filters.metrics.length === 0) return true;
+    return filters.metrics.includes(metricId);
+  };
+
+  const canShowLorenz = metricEnabled('gini') || metricEnabled('income-ratio');
+  const canShowDistribution = metricEnabled('wealth-top1') || metricEnabled('income-ratio');
+
+  const regionIncomeSeries = incomeSeriesCacheRef.current[`${isMetro ? 'metro' : 'state'}:${selectedRegion}`];
+
+  const availableHistoricalStartYear = canonicalRegion === 'United States' ? 1989 : 2000;
+  const effectiveHistoricalStartYear = Math.max(availableHistoricalStartYear, filters.yearRange[0]);
+
+  const stackedDataForView = applyTimeframeToStackedData(
+    generateStackedAreaData(regionData, wealthData, incomeDistData, regionIncomeSeries),
+    filters.timeframe,
+    filters.yearRange
+  );
+
+  const timeframeLabel =
+    filters.timeframe === 'current'
+      ? 'Current Snapshot'
+      : filters.timeframe === 'historical'
+        ? `Historical (${effectiveHistoricalStartYear}-${filters.yearRange[1]})`
+        : `Forecast (${filters.yearRange[0]}-${filters.yearRange[1]})`;
+
+  const requestResolutionLabel =
+    filters.timeframe === 'historical' || filters.timeframe === 'forecast'
+      ? `Requested ${filters.yearRange[1]} · Resolved ${incomeDistData?.year ?? 'N/A'}`
+      : null;
 
   const renderCharts = () => {
-    // Always show population + income when data exists; other metrics gated by filter checkboxes
+    // Metric cards are controlled by filter toggles.
     const metricsToShow = {
-      showPopulation: true,
-      showIncome: true,
-      showPoverty: true,
-      showEducation: true,
-      showUnemployment: true
+      showPopulation: metricEnabled('population'),
+      showIncome: metricEnabled('median-income'),
+      showPoverty: metricEnabled('poverty-rate'),
+      showEducation: metricEnabled('education'),
+      showUnemployment: metricEnabled('unemployment'),
+      showChildPoverty: metricEnabled('child-poverty'),
+      showSaipeIncome: metricEnabled('median-income'),
     };
 
     return (
@@ -237,7 +395,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
                 {selectedRegion} - Key Demographics
               </h2>
               <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                Timeframe: {filters.timeframe === 'current' ? 'Current Data' : filters.timeframe === 'historical' ? 'Historical Trends' : 'Forecast'}
+                Timeframe: {timeframeLabel}
               </p>
             </div>
           </div>
@@ -299,7 +457,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               </div>
             )}
             {/* SAIPE-sourced data — state-level for metros, state-level for states */}
-            {saipeData?.snapshot?.child_poverty_rate != null && (
+            {metricsToShow.showChildPoverty && saipeData?.snapshot?.child_poverty_rate != null && (
               <div className="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-4 border-l-4 border-orange-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Child Poverty Rate</p>
                 <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
@@ -312,7 +470,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             )}
             {/* Only show SAIPE income for states — for metros the ACS MSA income card above is
                  already present and more accurate; showing both creates confusing duplicates. */}
-            {!isMetro && saipeData?.snapshot?.median_household_income != null && (
+            {!isMetro && metricsToShow.showSaipeIncome && saipeData?.snapshot?.median_household_income != null && (
               <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-4 border-l-4 border-teal-500">
                 <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
                   Median Income (SAIPE)
@@ -374,6 +532,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         
         <button
           onClick={() => setVisualizationType('lorenz')}
+          disabled={!canShowLorenz}
           className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
             visualizationType === 'lorenz'
               ? 'bg-blue-600 dark:bg-blue-500 text-white'
@@ -387,6 +546,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         
         <button
           onClick={() => setVisualizationType('stacked')}
+          disabled={!canShowDistribution}
           className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
             visualizationType === 'stacked'
               ? 'bg-green-600 dark:bg-green-500 text-white'
@@ -400,6 +560,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         
         <button
           onClick={() => setVisualizationType('waffle')}
+          disabled={!canShowDistribution}
           className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
             visualizationType === 'waffle'
               ? 'bg-purple-600 dark:bg-purple-500 text-white'
@@ -412,17 +573,29 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         </button>
       </div>
 
+      {!canShowLorenz && visualizationType === 'lorenz' && (
+        <div className="mb-4 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+          Enable "Gini / Lorenz" or "Income Ratio Lens" in Metrics to view Lorenz analysis.
+        </div>
+      )}
+
+      {!canShowDistribution && (visualizationType === 'stacked' || visualizationType === 'waffle') && (
+        <div className="mb-4 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+          Enable "Distribution Charts" or "Income Ratio Lens" in Metrics to view stacked and waffle charts.
+        </div>
+      )}
+
       {/* Content based on selected visualization type */}
       {visualizationType === 'overview' && renderCharts()}
       {visualizationType === 'comparison' && regionData && (
-        <RegionalComparison selectedRegion={selectedRegion} regionData={regionData} />
+        <RegionalComparison selectedRegion={canonicalRegion} regionData={regionData} />
       )}
       {visualizationType === 'analysis' && regionData && (
-        <Analysis filters={filters} selectedRegion={selectedRegion} regionData={regionData} />
+        <Analysis filters={filters} selectedRegion={canonicalRegion} regionData={regionData} />
       )}
       
       {/* Advanced Visualizations */}
-      {visualizationType === 'lorenz' && (
+      {visualizationType === 'lorenz' && canShowLorenz && (
         <div>
           {/* Context banner: MSA data for metros, SAIPE for states */}
           {isMetro && demographics.population != null ? (
@@ -459,21 +632,24 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             incomeData={generateLorenzData(regionData, wealthData, incomeDistData)}
             giniCoefficient={incomeDistData?.gini_coefficient ?? wealthData?.gini_coefficient}
             title={incomeDistData
-              ? `${selectedRegion} Income Inequality · Gini: ${incomeDistData.gini_coefficient?.toFixed(3) ?? 'N/A'} · Source: Census ACS ${incomeDistData.year}`
-              : `Net Worth Inequality · Gini: ${wealthData ? wealthData.gini_coefficient.toFixed(3) : 'N/A'} · Source: Federal Reserve DFA (National)`
+              ? `${selectedRegion} Income Inequality · Gini: ${incomeDistData.gini_coefficient?.toFixed(3) ?? 'N/A'} · Source: Census ACS ${incomeDistData.year}${requestResolutionLabel ? ` · ${requestResolutionLabel}` : ''} · ${timeframeLabel}`
+              : `Net Worth Inequality · Gini: ${wealthData ? wealthData.gini_coefficient.toFixed(3) : 'N/A'} · Source: Federal Reserve DFA (National) · ${timeframeLabel}`
             }
           />
         </div>
       )}
 
-      {visualizationType === 'stacked' && (
+      {visualizationType === 'stacked' && canShowDistribution && (
         <StackedAreaChart
-          data={generateStackedAreaData(regionData, wealthData)}
-          title={`Income Share by Bracket 1989–2025 · Source: Federal Reserve DFA`}
+          data={stackedDataForView}
+          title={incomeDistData
+            ? `${selectedRegion} Income Share Distribution · ${timeframeLabel} · Source: ${incomeDistData.source}${requestResolutionLabel ? ` · ${requestResolutionLabel}` : ''}`
+            : `Income Share by Bracket · ${timeframeLabel} · Source: Federal Reserve DFA`
+          }
         />
       )}
 
-      {visualizationType === 'waffle' && (
+      {visualizationType === 'waffle' && canShowDistribution && (
         <div>
           {/* Context banner: MSA data for metros, SAIPE for states */}
           {isMetro && demographics.population != null ? (
@@ -506,8 +682,8 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           <WaffleChart
             data={generateWaffleData(regionData, wealthData, incomeDistData)}
             title={incomeDistData
-              ? `${selectedRegion} Income Distribution (${incomeDistData.year}) · Source: Census ACS`
-              : `Income Share Distribution (${wealthData?.data_date ?? 'latest'}) · Source: Federal Reserve DFA`
+              ? `${selectedRegion} Income Distribution (${incomeDistData.year}) · Source: Census ACS${requestResolutionLabel ? ` · ${requestResolutionLabel}` : ''} · ${timeframeLabel}`
+              : `Income Share Distribution (${wealthData?.data_date ?? 'latest'}) · Source: Federal Reserve DFA · ${timeframeLabel}`
             }
           />
         </div>
@@ -535,7 +711,91 @@ function generateLorenzData(_regionData: RegionData | null, wealthData: WealthDi
 }
 
 // Helper function to generate stacked area chart data
-function generateStackedAreaData(_regionData: RegionData | null, wealthData: WealthDistributionData | null): { year: number; [decile: string]: string | number }[] {
+function generateStackedAreaData(
+  _regionData: RegionData | null,
+  wealthData: WealthDistributionData | null,
+  incomeDistData: IncomeLorenzData | null = null,
+  incomeSeriesByYear?: Record<number, IncomeLorenzData>
+): { year: number; [decile: string]: string | number }[] {
+  if (incomeSeriesByYear && Object.keys(incomeSeriesByYear).length > 0) {
+    const sortedYears = Object.keys(incomeSeriesByYear)
+      .map((y) => Number(y))
+      .filter((y) => Number.isFinite(y))
+      .sort((a, b) => a - b);
+
+    const rows = sortedYears.map((year) => {
+      const snapshot = incomeSeriesByYear[year];
+      const bucketMap: Record<string, number> = {
+        'Bottom 20%': 0,
+        '20-40%': 0,
+        '40-60%': 0,
+        '60-80%': 0,
+        '80-99%': 0,
+        'Top 1%': 0,
+      };
+
+      for (const b of snapshot.waffle_data ?? []) {
+        if (b.bracket === 'Bottom 20%') bucketMap['Bottom 20%'] += b.percentage;
+        else if (b.bracket === '20-40%' || b.bracket === '20–40%') bucketMap['20-40%'] += b.percentage;
+        else if (b.bracket === '40-60%' || b.bracket === '40–60%') bucketMap['40-60%'] += b.percentage;
+        else if (b.bracket === '60-80%' || b.bracket === '60–80%') bucketMap['60-80%'] += b.percentage;
+        else if (b.bracket === '80-95%' || b.bracket === '80–95%') bucketMap['80-99%'] += b.percentage;
+        else if (b.bracket === 'Top 5%') bucketMap['Top 1%'] += b.percentage;
+      }
+
+      return {
+        year,
+        'Bottom 20%': Number(bucketMap['Bottom 20%'].toFixed(2)),
+        '20-40%': Number(bucketMap['20-40%'].toFixed(2)),
+        '40-60%': Number(bucketMap['40-60%'].toFixed(2)),
+        '60-80%': Number(bucketMap['60-80%'].toFixed(2)),
+        '80-99%': Number(bucketMap['80-99%'].toFixed(2)),
+        'Top 1%': Number(bucketMap['Top 1%'].toFixed(2)),
+      };
+    });
+
+    if (rows.length >= 2) return rows;
+  }
+
+  // Region-specific ACS snapshot (state or metro): build a single-year stacked row
+  if (incomeDistData?.waffle_data?.length && incomeDistData?.year) {
+    const bucketMap: Record<string, number> = {
+      'Bottom 20%': 0,
+      '20-40%': 0,
+      '40-60%': 0,
+      '60-80%': 0,
+      '80-99%': 0,
+      'Top 1%': 0,
+    };
+
+    for (const b of incomeDistData.waffle_data) {
+      if (b.bracket === 'Bottom 20%') bucketMap['Bottom 20%'] += b.percentage;
+      else if (b.bracket === '20-40%' || b.bracket === '20–40%') bucketMap['20-40%'] += b.percentage;
+      else if (b.bracket === '40-60%' || b.bracket === '40–60%') bucketMap['40-60%'] += b.percentage;
+      else if (b.bracket === '60-80%' || b.bracket === '60–80%') bucketMap['60-80%'] += b.percentage;
+      else if (b.bracket === '80-95%' || b.bracket === '80–95%') bucketMap['80-99%'] += b.percentage;
+      else if (b.bracket === 'Top 5%') bucketMap['Top 1%'] += b.percentage;
+    }
+
+    const snapshotRow = {
+      year: incomeDistData.year,
+      'Bottom 20%': Number(bucketMap['Bottom 20%'].toFixed(2)),
+      '20-40%': Number(bucketMap['20-40%'].toFixed(2)),
+      '40-60%': Number(bucketMap['40-60%'].toFixed(2)),
+      '60-80%': Number(bucketMap['60-80%'].toFixed(2)),
+      '80-99%': Number(bucketMap['80-99%'].toFixed(2)),
+      'Top 1%': Number(bucketMap['Top 1%'].toFixed(2)),
+    };
+
+    // Recharts AreaChart does not visibly fill with a single x-point.
+    // Build a tiny 3-year window with identical values so the stacked areas render.
+    return [
+      { ...snapshotRow, year: incomeDistData.year - 1 },
+      snapshotRow,
+      { ...snapshotRow, year: incomeDistData.year + 1 },
+    ];
+  }
+
   // Use real Federal Reserve DFA time series if available
   if (wealthData?.stacked_data?.length) return wealthData.stacked_data as { year: number; [decile: string]: string | number }[];
 
@@ -550,6 +810,59 @@ function generateStackedAreaData(_regionData: RegionData | null, wealthData: Wea
     '80-99%':     40 + Math.random() * 0.5,
     'Top 1%':     17 + Math.random() * 0.5,
   }));
+}
+
+function applyTimeframeToStackedData(
+  data: { year: number; [decile: string]: string | number }[],
+  timeframe: 'current' | 'historical' | 'forecast',
+  yearRange: [number, number]
+): { year: number; [decile: string]: string | number }[] {
+  if (!data.length) return data;
+
+  if (timeframe === 'current') {
+    // Show a recent window when available.
+    return data.length > 8 ? data.slice(-8) : data;
+  }
+
+  if (timeframe === 'historical') {
+    const filtered = data.filter(d => d.year >= yearRange[0] && d.year <= yearRange[1] && d.year <= 2023);
+    return filtered;
+  }
+
+  // Forecast: project from the latest observed pattern.
+  const observed = [...data].filter(d => d.year <= 2025).sort((a, b) => a.year - b.year);
+  const base = observed.length ? observed : [...data].sort((a, b) => a.year - b.year);
+  const last = base[base.length - 1];
+  const first = base[Math.max(0, base.length - 5)];
+  const keys = Object.keys(last).filter(k => k !== 'year');
+  const deltaYears = Math.max(1, Number(last.year) - Number(first.year));
+
+  const slopes: Record<string, number> = {};
+  keys.forEach((k) => {
+    const a = Number(first[k] ?? 0);
+    const b = Number(last[k] ?? 0);
+    slopes[k] = (b - a) / deltaYears;
+  });
+
+  const projected: { year: number; [decile: string]: string | number }[] = [];
+  for (let year = yearRange[0]; year <= yearRange[1]; year++) {
+    const row: { year: number; [decile: string]: string | number } = { year };
+    keys.forEach((k) => {
+      const yearsForward = year - Number(last.year);
+      const value = Number(last[k] ?? 0) + slopes[k] * yearsForward;
+      row[k] = Math.max(0, Number(value.toFixed(2)));
+    });
+
+    // Re-normalize to 100 so stacked shares remain valid percentages.
+    const sum = keys.reduce((s, k) => s + Number(row[k] ?? 0), 0) || 1;
+    keys.forEach((k) => {
+      row[k] = Number(((Number(row[k] ?? 0) / sum) * 100).toFixed(2));
+    });
+
+    projected.push(row);
+  }
+
+  return projected.length ? projected : data;
 }
 
 // Helper function to generate waffle chart data
