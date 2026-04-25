@@ -1211,7 +1211,7 @@ async def get_policy(request: PolicyRequest):
         recommendations = get_policy_recommendations_for_region(
             region_data=region_data,
             policy_history_context=policy_history,
-            openai_api_key=groq_api_key,
+            groq_api_key=groq_api_key,
         )
 
         return {

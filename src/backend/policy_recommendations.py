@@ -591,7 +591,7 @@ class PolicyRecommendationEngine:
         demographics: Dict[str, Any] = None,
         geographic_focus: str = None,
         policy_history_context: str = "",
-        openai_api_key: str = None,
+        groq_api_key: str = None,
     ) -> List[Dict[str, Any]]:
         """
         Generate LLM-backed policy recommendations driven by real economic data.
@@ -603,7 +603,7 @@ class PolicyRecommendationEngine:
 
         Returns a list of structured recommendation dicts.
         """
-        api_key = openai_api_key or os.getenv("GROQ_API_KEY")
+        api_key = groq_api_key or os.getenv("GROQ_API_KEY")
         if not api_key:
             logger.warning("No GROQ_API_KEY — falling back to heuristic scoring")
             return PolicyRecommendationEngine._heuristic_fallback(
@@ -801,7 +801,7 @@ Return ONLY a valid JSON array of 5 objects. No markdown fences, no prose."""
 def get_policy_recommendations_for_region(
     region_data: Dict[str, Any],
     policy_history_context: str = "",
-    openai_api_key: str = None,
+    groq_api_key: str = None,
 ) -> List[Dict[str, Any]]:
     """
     Main entry point for LLM-generated policy recommendations for a region.
@@ -812,7 +812,7 @@ def get_policy_recommendations_for_region(
              unemployment_rate, poverty_rate, demographics, region)
         policy_history_context: Optional pre-formatted historical policy text
             from regional_policy_history.py to ground LLM in evidence
-        openai_api_key: OpenAI API key (falls back to OPENAI_API_KEY env var)
+        groq_api_key: Groq API key (falls back to GROQ_API_KEY env var)
 
     Returns:
         List of LLM-generated policy recommendations with priority scores
@@ -826,7 +826,7 @@ def get_policy_recommendations_for_region(
         demographics=region_data.get('demographics', {}),
         geographic_focus=region_data.get('region', 'National'),
         policy_history_context=policy_history_context,
-        openai_api_key=openai_api_key,
+        groq_api_key=groq_api_key,
     )
 
 

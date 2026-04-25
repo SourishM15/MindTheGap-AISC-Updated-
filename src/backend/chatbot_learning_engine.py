@@ -10,7 +10,6 @@ from typing import List, Dict, Tuple
 import numpy as np
 from datetime import datetime
 from dotenv import load_dotenv
-import boto3  # kept for legacy reference only
 from supabase import create_client
 
 logger = logging.getLogger(__name__)

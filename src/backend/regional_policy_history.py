@@ -20,13 +20,11 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Any, Optional
 
-import boto3  # kept for legacy reference only — not used at runtime
 from supabase import create_client
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
-# Load .env so AWS credentials are available when the module is imported
 _ENV_PATH = os.path.join(os.path.dirname(__file__), ".env")
 load_dotenv(_ENV_PATH, override=True)
 
