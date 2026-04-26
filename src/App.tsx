@@ -9,7 +9,7 @@ import ThemeToggle from './components/ThemeToggle';
 function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-white dark:bg-gray-900 text-gray-900 dark:text-white transition-colors duration-200">
+      <div className="min-h-screen text-slate-950 transition-colors duration-200 dark:text-slate-100">
         <Header />
         <Routes>
           <Route path="/" element={<HomePage />} />
@@ -19,10 +19,11 @@ function App() {
           <Route path="/seattle-neighborhoods/:neighborhoodName" element={<SeattleNeighborhoodsPage />} />
         </Routes>
         
-        <footer className="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-white p-4 mt-10">
-          <div className="container mx-auto">
+        <footer className="mt-10 overflow-hidden border-t border-slate-200/80 bg-white/70 text-slate-600 backdrop-blur dark:border-slate-800 dark:bg-slate-950/50 dark:text-slate-400">
+          <div className="accent-strip" />
+          <div className="container mx-auto px-6 py-5">
             <p className="text-center text-sm">
-              &copy; 2025 Inequality Forecast Dashboard | Data is simulated for demonstration purposes
+              &copy; 2025 MindThe_Gap · Inequality Forecast Dashboard
             </p>
           </div>
         </footer>

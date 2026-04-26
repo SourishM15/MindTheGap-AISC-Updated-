@@ -101,11 +101,13 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   const [minYear, maxYear] = getYearBounds(filters.timeframe);
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
+    <div className="surface mb-8 overflow-hidden lg:sticky lg:top-24">
+      <div className="accent-strip" />
+      <div className="p-5">
       {/* Region Selection */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
-          <MapPin size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+        <h3 className="mb-4 flex items-center text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+          <MapPin size={18} className="mr-2 text-cyan-600 dark:text-cyan-300" />
           Region
         </h3>
         <div className="flex flex-wrap gap-3">
@@ -116,10 +118,10 @@ const FilterControls: React.FC<FilterControlsProps> = ({
               setShowMetroDropdown(false);
               onRegionChange?.('United States');
             }}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+            className={`control-button ${
               selectedRegion === 'United States'
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? 'control-button-active'
+                : 'control-button-idle'
             }`}
           >
             United States
@@ -132,17 +134,17 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                 setShowStateDropdown(!showStateDropdown);
                 setShowMetroDropdown(false);
               }}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              className={`control-button flex items-center gap-2 ${
                 US_STATES.includes(selectedRegion)
-                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  ? 'control-button-active'
+                  : 'control-button-idle'
               }`}
             >
               States
               <ChevronDown className="w-4 h-4" />
             </button>
             {showStateDropdown && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-40 max-h-64 overflow-y-auto">
+              <div className="absolute left-0 top-full z-40 mt-2 max-h-64 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/80 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30">
                 {US_STATES.map((state) => (
                   <button
                     key={state}
@@ -150,8 +152,8 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                       onRegionChange?.(state);
                       setShowStateDropdown(false);
                     }}
-                    className={`w-full text-left px-4 py-2 hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${
-                      selectedRegion === state ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                    className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-cyan-50 dark:hover:bg-slate-800 ${
+                      selectedRegion === state ? 'bg-cyan-50 font-bold text-cyan-700 dark:bg-slate-800 dark:text-cyan-300' : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {state}
@@ -168,17 +170,17 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                 setShowMetroDropdown(!showMetroDropdown);
                 setShowStateDropdown(false);
               }}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+              className={`control-button flex items-center gap-2 ${
                 isMetroSelection
-                  ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  ? 'control-button-active'
+                  : 'control-button-idle'
               }`}
             >
               Metro Areas
               <ChevronDown className="w-4 h-4" />
             </button>
             {showMetroDropdown && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-lg shadow-lg z-40 max-h-64 overflow-y-auto">
+              <div className="absolute left-0 top-full z-40 mt-2 max-h-64 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/80 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30">
                 {metroOptions.map((metro) => (
                   <button
                     key={metro.value}
@@ -186,8 +188,8 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                       onRegionChange?.(metro.value);
                       setShowMetroDropdown(false);
                     }}
-                    className={`w-full text-left px-4 py-2 hover:bg-indigo-50 dark:hover:bg-slate-600 transition-colors ${
-                      selectedRegion === metro.value ? 'bg-indigo-100 dark:bg-slate-600 text-indigo-700 dark:text-indigo-300 font-medium' : 'text-gray-700 dark:text-gray-300'
+                    className={`w-full px-4 py-2 text-left text-sm transition-colors hover:bg-cyan-50 dark:hover:bg-slate-800 ${
+                      selectedRegion === metro.value ? 'bg-cyan-50 font-bold text-cyan-700 dark:bg-slate-800 dark:text-cyan-300' : 'text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     {metro.label}
@@ -201,37 +203,37 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Timeframe Selection */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
-          <Calendar size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+        <h3 className="mb-4 flex items-center text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+          <Calendar size={18} className="mr-2 text-cyan-600 dark:text-cyan-300" />
           Timeframe
         </h3>
-        <div className="flex flex-col space-y-2">
+        <div className="grid grid-cols-3 gap-2 lg:grid-cols-1">
           <button
             onClick={() => handleTimeframeChange('current')}
-            className={`px-4 py-2 rounded-md transition-colors ${
+            className={`control-button ${
               filters.timeframe === 'current' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? 'control-button-active'
+                : 'control-button-idle'
             }`}
           >
             Current
           </button>
           <button
             onClick={() => handleTimeframeChange('historical')}
-            className={`px-4 py-2 rounded-md transition-colors ${
+            className={`control-button ${
               filters.timeframe === 'historical' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? 'control-button-active'
+                : 'control-button-idle'
             }`}
           >
             Historical
           </button>
           <button
             onClick={() => handleTimeframeChange('forecast')}
-            className={`px-4 py-2 rounded-md transition-colors ${
+            className={`control-button ${
               filters.timeframe === 'forecast' 
-                ? 'bg-indigo-600 dark:bg-indigo-500 text-white' 
-                : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                ? 'control-button-active'
+                : 'control-button-idle'
             }`}
           >
             Forecast
@@ -241,23 +243,23 @@ const FilterControls: React.FC<FilterControlsProps> = ({
 
       {/* Metrics Selection */}
       <div className="mb-6">
-        <h3 className="text-lg font-semibold flex items-center mb-4 text-gray-800 dark:text-gray-200">
-          <LineChart size={20} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+        <h3 className="mb-4 flex items-center text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+          <LineChart size={18} className="mr-2 text-cyan-600 dark:text-cyan-300" />
           Metrics
         </h3>
         <div className="space-y-2">
           {metricOptions.map(metric => (
             <label 
               key={metric.id}
-              className="flex items-center space-x-2 cursor-pointer p-2 rounded hover:bg-gray-50 dark:hover:bg-gray-700 w-full"
+              className="flex w-full cursor-pointer items-center gap-3 rounded-md border border-transparent p-2 text-sm font-medium text-slate-700 transition-colors hover:border-slate-200 hover:bg-slate-50 dark:text-slate-300 dark:hover:border-slate-700 dark:hover:bg-slate-800/70"
             >
               <input
                 type="checkbox"
                 checked={filters.metrics.includes(metric.id)}
                 onChange={() => handleMetricToggle(metric.id)}
-                className="form-checkbox h-5 w-5 text-indigo-600 dark:text-indigo-400 rounded focus:ring-indigo-500 dark:focus:ring-indigo-400"
+                className="h-4 w-4 rounded border-slate-300 text-cyan-600 focus:ring-cyan-500 dark:border-slate-600 dark:bg-slate-900 dark:text-cyan-400"
               />
-              <span className="text-gray-700 dark:text-gray-300">{metric.label}</span>
+              <span>{metric.label}</span>
             </label>
           ))}
         </div>
@@ -266,12 +268,12 @@ const FilterControls: React.FC<FilterControlsProps> = ({
       {/* Year Range Selection */}
       {filters.timeframe !== 'current' && (
         <div>
-          <h3 className="text-lg font-semibold flex items-center mb-3 text-gray-800 dark:text-gray-200">
-            <Sliders size={18} className="mr-2 text-indigo-600 dark:text-indigo-400" />
+          <h3 className="mb-3 flex items-center text-sm font-black uppercase tracking-wide text-slate-700 dark:text-slate-200">
+            <Sliders size={18} className="mr-2 text-cyan-600 dark:text-cyan-300" />
             Year Range
           </h3>
           <div className="space-y-3">
-            <div className="flex justify-between text-gray-700 dark:text-gray-300">
+            <div className="flex justify-between text-sm font-bold text-slate-700 dark:text-slate-300">
               <span>{filters.yearRange[0]}</span>
               <span>{filters.yearRange[1]}</span>
             </div>
@@ -283,9 +285,9 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                   max={maxYear}
                   value={filters.yearRange[0]}
                   onChange={(e) => handleYearRangeChange(e, 0)}
-                  className="w-full accent-indigo-600 dark:accent-indigo-400"
+                  className="w-full accent-cyan-600 dark:accent-cyan-400"
                 />
-                <div className="absolute -top-6 left-0 text-xs text-gray-600">Start Year</div>
+                <div className="absolute -top-6 left-0 text-xs font-semibold text-slate-500 dark:text-slate-400">Start Year</div>
               </div>
               <div className="relative">
                 <input
@@ -294,14 +296,15 @@ const FilterControls: React.FC<FilterControlsProps> = ({
                   max={maxYear}
                   value={filters.yearRange[1]}
                   onChange={(e) => handleYearRangeChange(e, 1)}
-                  className="w-full accent-indigo-600 dark:accent-indigo-400"
+                  className="w-full accent-cyan-600 dark:accent-cyan-400"
                 />
-                <div className="absolute -top-6 left-0 text-xs text-gray-600">End Year</div>
+                <div className="absolute -top-6 left-0 text-xs font-semibold text-slate-500 dark:text-slate-400">End Year</div>
               </div>
             </div>
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };

@@ -1,3 +1,87 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
+  }
+
+  body {
+    margin: 0;
+    min-width: 320px;
+    background:
+      radial-gradient(circle at 8% 0%, rgba(14, 165, 233, 0.16), transparent 30rem),
+      radial-gradient(circle at 85% 10%, rgba(244, 114, 182, 0.12), transparent 28rem),
+      radial-gradient(circle at 55% 42%, rgba(245, 158, 11, 0.09), transparent 34rem),
+      linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  .dark body {
+    background:
+      radial-gradient(circle at 10% 0%, rgba(20, 184, 166, 0.16), transparent 30rem),
+      radial-gradient(circle at 88% 6%, rgba(168, 85, 247, 0.17), transparent 30rem),
+      radial-gradient(circle at 55% 48%, rgba(245, 158, 11, 0.08), transparent 34rem),
+      linear-gradient(180deg, #07111f 0%, #0f172a 100%);
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-lg border border-slate-200/80 bg-white/90 shadow-sm shadow-slate-200/70 backdrop-blur dark:border-slate-700/70 dark:bg-slate-900/80 dark:shadow-black/20;
+    background-image:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(255, 255, 255, 0.78)),
+      linear-gradient(135deg, rgba(14, 165, 233, 0.08), rgba(244, 114, 182, 0.06), rgba(245, 158, 11, 0.06));
+  }
+
+  .dark .surface {
+    background-image:
+      linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(15, 23, 42, 0.74)),
+      linear-gradient(135deg, rgba(20, 184, 166, 0.12), rgba(168, 85, 247, 0.1), rgba(245, 158, 11, 0.07));
+  }
+
+  .surface-muted {
+    @apply rounded-lg border border-slate-200 bg-slate-50/90 dark:border-slate-700 dark:bg-slate-800/70;
+    background-image: linear-gradient(135deg, rgba(236, 254, 255, 0.85), rgba(255, 247, 237, 0.74));
+  }
+
+  .dark .surface-muted {
+    background-image: linear-gradient(135deg, rgba(8, 47, 73, 0.52), rgba(76, 29, 149, 0.34));
+  }
+
+  .control-button {
+    @apply rounded-md px-3 py-2 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500/50 focus:ring-offset-2 focus:ring-offset-white dark:focus:ring-offset-slate-950;
+  }
+
+  .control-button-active {
+    @apply bg-slate-950 text-white shadow-sm dark:bg-cyan-400 dark:text-slate-950;
+    background-image: linear-gradient(135deg, #0f172a, #0e7490);
+  }
+
+  .dark .control-button-active {
+    background-image: linear-gradient(135deg, #67e8f9, #fbbf24);
+  }
+
+  .control-button-idle {
+    @apply bg-slate-100 text-slate-700 hover:bg-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700;
+  }
+
+  .metric-card {
+    @apply rounded-lg border bg-white p-4 shadow-sm transition-colors dark:bg-slate-900/80;
+    background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 252, 0.8));
+  }
+
+  .dark .metric-card {
+    background-image: linear-gradient(145deg, rgba(15, 23, 42, 0.92), rgba(30, 41, 59, 0.74));
+  }
+
+  .accent-strip {
+    @apply h-1.5 w-full;
+    background: linear-gradient(90deg, #06b6d4, #22c55e, #f59e0b, #f43f5e, #8b5cf6);
+  }
+}

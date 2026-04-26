@@ -309,15 +309,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center p-8">
-        <div className="text-gray-600 dark:text-gray-400">Loading data for {selectedRegion}...</div>
+      <div className="surface flex items-center justify-center p-8">
+        <div className="text-slate-600 dark:text-slate-400">Loading data for {selectedRegion}...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-800 dark:text-red-200 px-4 py-3 rounded">
+      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-red-800 dark:border-red-800 dark:bg-red-950/50 dark:text-red-200">
         {error}
       </div>
     );
@@ -325,7 +325,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
   if (!regionData) {
     return (
-      <div className="bg-yellow-100 dark:bg-yellow-900 border border-yellow-400 dark:border-yellow-700 text-yellow-800 dark:text-yellow-200 px-4 py-3 rounded">
+      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
         No data available for {selectedRegion}
       </div>
     );
@@ -388,13 +388,13 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
     return (
       <div className="grid grid-cols-1 gap-6 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-start mb-4">
+        <div className="surface p-6">
+          <div className="mb-4 flex justify-between items-start">
             <div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">
                 {selectedRegion} - Key Demographics
               </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+              <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Timeframe: {timeframeLabel}
               </p>
             </div>
@@ -403,67 +403,67 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           {/* Data source badge */}
           <div className={`text-xs px-3 py-1.5 rounded-full inline-flex items-center gap-1.5 mb-5 font-medium
             ${isMetro
-              ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300'
-              : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'}`}>
-            <span className={`w-2 h-2 rounded-full ${isMetro ? 'bg-blue-500' : 'bg-gray-400'}`} />
+              ? 'bg-cyan-100 dark:bg-cyan-950/70 text-cyan-800 dark:text-cyan-300'
+              : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400'}`}>
+            <span className={`w-2 h-2 rounded-full ${isMetro ? 'bg-cyan-500' : 'bg-amber-400'}`} />
             {isMetro
               ? `Census ACS 2021 · ${selectedRegion} Metro Statistical Area (MSA FIPS: ${demographics.metro_fips ?? '—'})`
               : `Census ACS / SAIPE · ${selectedRegion}`}
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {metricsToShow.showPopulation && demographics.population != null && (
-              <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4 border-l-4 border-blue-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Population</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-900/80 dark:from-cyan-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Population</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {(demographics.population / 1000000).toFixed(1)}M
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Total residents</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Total residents</p>
               </div>
             )}
             {metricsToShow.showIncome && demographics.median_household_income != null && (
-              <div className="bg-green-50 dark:bg-green-900/30 rounded-lg p-4 border-l-4 border-green-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Median Income</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/80 dark:from-emerald-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Median Income</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   ${(demographics.median_household_income / 1000).toFixed(0)}K
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Household annual</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Household annual</p>
               </div>
             )}
             {metricsToShow.showPoverty && demographics.poverty_rate != null && (
-              <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-4 border-l-4 border-yellow-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Poverty Rate</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/80 dark:from-amber-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Poverty Rate</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {demographics.poverty_rate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Below poverty line</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Below poverty line</p>
               </div>
             )}
             {metricsToShow.showEducation && demographics.education_bachelor_and_above != null && (
-              <div className="bg-purple-50 dark:bg-purple-900/30 rounded-lg p-4 border-l-4 border-purple-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Education</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/80 dark:from-violet-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Education</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {demographics.education_bachelor_and_above.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Bachelor's degree+</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Bachelor's degree+</p>
               </div>
             )}
             {metricsToShow.showUnemployment && latestUnemploymentRate != null && (
-              <div className="bg-red-50 dark:bg-red-900/30 rounded-lg p-4 border-l-4 border-red-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Unemployment</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-rose-200 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/80 dark:from-rose-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Unemployment</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {latestUnemploymentRate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">Current rate</p>
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Current rate</p>
               </div>
             )}
             {/* SAIPE-sourced data — state-level for metros, state-level for states */}
             {metricsToShow.showChildPoverty && saipeData?.snapshot?.child_poverty_rate != null && (
-              <div className="bg-orange-50 dark:bg-orange-900/30 rounded-lg p-4 border-l-4 border-orange-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">Child Poverty Rate</p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+              <div className="metric-card border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900/80 dark:from-orange-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Child Poverty Rate</p>
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {saipeData.snapshot.child_poverty_rate.toFixed(1)}%
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                   Under 18 · SAIPE {saipeData.snapshot.year}{isMetro ? ` · ${saipeRegionLabel} (state)` : ''}
                 </p>
               </div>
@@ -471,14 +471,14 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             {/* Only show SAIPE income for states — for metros the ACS MSA income card above is
                  already present and more accurate; showing both creates confusing duplicates. */}
             {!isMetro && metricsToShow.showSaipeIncome && saipeData?.snapshot?.median_household_income != null && (
-              <div className="bg-teal-50 dark:bg-teal-900/30 rounded-lg p-4 border-l-4 border-teal-500">
-                <p className="text-sm text-gray-600 dark:text-gray-400 font-medium">
+              <div className="metric-card border-teal-200 bg-gradient-to-br from-teal-50 to-white dark:border-teal-900/80 dark:from-teal-950/30 dark:to-slate-900">
+                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">
                   Median Income (SAIPE)
                 </p>
-                <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-1">
+                <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   ${(saipeData.snapshot.median_household_income / 1000).toFixed(0)}K
                 </p>
-                <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
+                <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                   State estimate · SAIPE {saipeData.snapshot.year}
                 </p>
               </div>
@@ -492,13 +492,13 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
   return (
     <div>
       {/* Visualization Type Selector */}
-      <div className="flex gap-2 mb-6 flex-wrap">
+      <div className="surface mb-6 flex flex-wrap gap-2 overflow-hidden p-2">
         <button
           onClick={() => setVisualizationType('overview')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             visualizationType === 'overview'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <BarChartIcon className="w-4 h-4" />
@@ -506,10 +506,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         </button>
         <button
           onClick={() => setVisualizationType('comparison')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             visualizationType === 'comparison'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <TrendingUp className="w-4 h-4" />
@@ -517,10 +517,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         </button>
         <button
           onClick={() => setVisualizationType('analysis')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             visualizationType === 'analysis'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <Info className="w-4 h-4" />
@@ -528,15 +528,15 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         </button>
         
         {/* New Advanced Visualizations */}
-        <div className="border-l border-gray-300 dark:border-gray-600 pl-2 ml-2" />
+        <div className="ml-2 border-l border-slate-200 pl-2 dark:border-slate-700" />
         
         <button
           onClick={() => setVisualizationType('lorenz')}
           disabled={!canShowLorenz}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'lorenz'
-              ? 'bg-blue-600 dark:bg-blue-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'bg-cyan-600 text-white dark:bg-cyan-400 dark:text-slate-950'
+              : 'control-button-idle'
           }`}
           title="Shows wealth distribution with Gini coefficient"
         >
@@ -547,10 +547,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <button
           onClick={() => setVisualizationType('stacked')}
           disabled={!canShowDistribution}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'stacked'
-              ? 'bg-green-600 dark:bg-green-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-slate-950'
+              : 'control-button-idle'
           }`}
           title="Shows income distribution by decile over time"
         >
@@ -561,10 +561,10 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <button
           onClick={() => setVisualizationType('waffle')}
           disabled={!canShowDistribution}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'waffle'
-              ? 'bg-purple-600 dark:bg-purple-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'bg-violet-600 text-white dark:bg-violet-400 dark:text-slate-950'
+              : 'control-button-idle'
           }`}
           title="100-square grid showing population distribution"
         >
@@ -574,13 +574,13 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       </div>
 
       {!canShowLorenz && visualizationType === 'lorenz' && (
-        <div className="mb-4 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
           Enable "Gini / Lorenz" or "Income Ratio Lens" in Metrics to view Lorenz analysis.
         </div>
       )}
 
       {!canShowDistribution && (visualizationType === 'stacked' || visualizationType === 'waffle') && (
-        <div className="mb-4 bg-yellow-100 dark:bg-yellow-900/40 border border-yellow-300 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+        <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/50 dark:text-amber-200">
           Enable "Distribution Charts" or "Income Ratio Lens" in Metrics to view stacked and waffle charts.
         </div>
       )}

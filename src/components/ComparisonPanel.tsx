@@ -104,9 +104,11 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="surface overflow-hidden">
+      <div className="accent-strip" />
+      <div className="p-6">
       <div className="mb-6">
-        <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">
+        <h3 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white mb-4">
           Region Comparison Tool
         </h3>
         
@@ -114,14 +116,14 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
           <div className="relative">
             <button
               onClick={() => setShowDropdown(!showDropdown)}
-              className="px-4 py-2 bg-indigo-600 dark:bg-indigo-500 text-white rounded-lg hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors flex items-center space-x-2"
+              className="flex items-center gap-2 rounded-md bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 text-sm font-bold text-white shadow-sm transition-colors hover:from-cyan-700 hover:to-teal-700 dark:from-cyan-300 dark:to-amber-200 dark:text-slate-950"
             >
               <Plus size={18} />
               <span>Add State</span>
             </button>
             
             {showDropdown && (
-              <div className="absolute top-full left-0 mt-2 w-64 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg shadow-lg z-10 max-h-64 overflow-y-auto">
+              <div className="absolute left-0 top-full z-10 mt-2 max-h-64 w-64 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-xl shadow-slate-200/80 dark:border-slate-700 dark:bg-slate-900 dark:shadow-black/30">
                 {availableStates.map(state => (
                   <button
                     key={state}
@@ -129,7 +131,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
                       onStateAdd(state);
                       setShowDropdown(false);
                     }}
-                    className="w-full text-left px-4 py-2 hover:bg-indigo-100 dark:hover:bg-indigo-900 text-gray-800 dark:text-gray-200 transition-colors"
+                    className="w-full px-4 py-2 text-left text-sm text-slate-800 transition-colors hover:bg-cyan-50 dark:text-slate-200 dark:hover:bg-slate-800"
                   >
                     {state}
                   </button>
@@ -138,13 +140,13 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
             )}
           </div>
           
-          <span className="text-sm text-gray-600 dark:text-gray-400">
+          <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
             {selectedStates.length > 0 && `${selectedStates.length} state${selectedStates.length !== 1 ? 's' : ''} selected`}
           </span>
         </div>
 
         {selectedStates.length === 0 && (
-          <div className="bg-indigo-50 dark:bg-indigo-900 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 text-indigo-700 dark:text-indigo-200">
+          <div className="rounded-lg border border-cyan-200 bg-gradient-to-r from-cyan-50 to-amber-50 p-4 text-cyan-800 dark:border-cyan-800 dark:from-cyan-950/60 dark:to-violet-950/45 dark:text-cyan-200">
             <p className="text-sm">Select states to compare. USA average will be shown as a reference.</p>
           </div>
         )}
@@ -282,6 +284,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
           <p>Select states above to see a detailed comparison with the USA average.</p>
         </div>
       )}
+      </div>
     </div>
   );
 };

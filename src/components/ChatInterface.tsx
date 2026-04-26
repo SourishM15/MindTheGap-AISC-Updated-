@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../types';
-import { Send, MessageCircle } from 'lucide-react';
+import { ChevronsDownUp, ChevronsUpDown, MessageCircle, Send } from 'lucide-react';
 
 interface ChatInterfaceProps {
   onChatQuery: (query: string) => void;
@@ -23,17 +23,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
-
-  const processQuestion = (question: string) => {
-    // Split the input into individual questions based on common separators
-    const questions = question
-      .split(/[?.,!]\s+/)
-      .map(q => q.trim())
-      .filter(q => q.length > 0)
-      .map(q => q.endsWith('?') ? q : `${q}?`);
-
-    return questions;
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,31 +90,24 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
   };
 
   return (
-    <div className={`bg-white dark:bg-gray-800 rounded-lg shadow-md flex flex-col transition-all duration-300 ease-in-out ${
+    <div className={`surface flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
       isExpanded ? 'h-[500px]' : 'h-[300px]'
     }`}>
-      <div className="flex items-center justify-between bg-indigo-600 dark:bg-indigo-800 text-white rounded-t-lg p-4">
-        <h3 className="font-semibold text-base flex items-center">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-slate-950 via-cyan-950 to-teal-900 p-4 text-white dark:border-slate-800 dark:from-slate-950 dark:via-violet-950 dark:to-cyan-950">
+        <h3 className="flex items-center text-sm font-black">
           <MessageCircle size={20} className="mr-2" />
-          Wealth & Economics Assistant
+          Economics Assistant
         </h3>
-        <button 
+        <button
           onClick={toggleExpand}
-          className="text-indigo-100 hover:text-white transition-colors"
+          className="rounded-md p-1.5 text-slate-300 transition-colors hover:bg-white/10 hover:text-white"
+          aria-label={isExpanded ? 'Collapse assistant' : 'Expand assistant'}
         >
-          {isExpanded ? (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          ) : (
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-            </svg>
-          )}
+          {isExpanded ? <ChevronsDownUp size={18} /> : <ChevronsUpDown size={18} />}
         </button>
       </div>
       
-      <div className="flex-1 overflow-y-auto p-5">
+      <div className="flex-1 overflow-y-auto p-4">
         {messages.map((message) => (
           <div 
             key={message.id} 
@@ -135,16 +117,16 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
                 : 'text-left'
             }`}
           >
-            <div className={`inline-block max-w-[80%] px-3 py-2 rounded-lg ${
+            <div className={`inline-block max-w-[86%] rounded-lg px-3 py-2 text-sm leading-6 shadow-sm ${
               message.role === 'user'
-                ? 'bg-indigo-600 text-white dark:bg-indigo-500'
+                ? 'bg-cyan-600 text-white dark:bg-cyan-500 dark:text-slate-950'
                 : message.role === 'system'
-                  ? 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-600'
-                  : 'bg-gray-200 text-gray-800 dark:bg-gray-600 dark:text-gray-200'
+                  ? 'border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
+                  : 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100'
             }`}>
               {message.content}
             </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
               {message.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </div>
           </div>
@@ -152,7 +134,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
         <div ref={chatEndRef} />
       </div>
       
-      <form onSubmit={handleSubmit} className="border-t border-gray-200 dark:border-gray-700 p-4">
+      <form onSubmit={handleSubmit} className="border-t border-slate-200 p-4 dark:border-slate-800">
         <div className="flex">
           <input
             type="text"
@@ -160,12 +142,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
             onChange={(e) => setInputValue(e.target.value)}
             placeholder="Ask about states, cities, or U.S. inequality..."
             disabled={isProcessing}
-            className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-l-md focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent dark:bg-gray-700 dark:text-gray-200 dark:placeholder-gray-400"
+            className="min-w-0 flex-1 rounded-l-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 placeholder-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder-slate-500"
           />
-          <button 
+          <button
             type="submit"
             disabled={isProcessing}
-            className={`bg-indigo-600 dark:bg-indigo-500 text-white px-4 py-2 rounded-r-md hover:bg-indigo-700 dark:hover:bg-indigo-600 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+            className={`rounded-r-md bg-slate-950 px-4 py-2 text-white transition-colors hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300 ${
               isProcessing ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >

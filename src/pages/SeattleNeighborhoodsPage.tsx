@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { MapPin } from 'lucide-react';
+import { Building2, MapPin } from 'lucide-react';
 import { getDemographicsSummary } from '../data/seattleDemographics';
 import DemographicsModal from '../components/DemographicsModal';
 import { useParams, Link, useNavigate } from 'react-router-dom';
@@ -63,8 +63,13 @@ const SeattleNeighborhoodsPage: React.FC = () => {
   if (neighborhoodName && !summary) {
     return (
       <div className="container mx-auto px-4 py-8 text-center">
-        <h1 className="text-4xl font-bold mb-4">Neighborhood data not found for {getDisplayName(neighborhoodName)}.</h1>
-        <Link to="/seattle-neighborhoods" className="text-indigo-600 hover:underline">Go back to the list</Link>
+        <div className="surface mx-auto max-w-3xl overflow-hidden">
+          <div className="accent-strip" />
+          <div className="p-8">
+            <h1 className="mb-4 text-4xl font-black tracking-tight text-slate-950 dark:text-white">Neighborhood data not found for {getDisplayName(neighborhoodName)}.</h1>
+            <Link to="/seattle-neighborhoods" className="font-bold text-cyan-700 hover:underline dark:text-cyan-300">Go back to the list</Link>
+          </div>
+        </div>
       </div>
     );
   }
@@ -72,9 +77,13 @@ const SeattleNeighborhoodsPage: React.FC = () => {
   return (
     <main className="container mx-auto px-4 py-8">
       <div className="max-w-6xl mx-auto">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">Seattle Neighborhoods</h1>
-          <p className="text-xl text-gray-600 dark:text-gray-300">Explore demographic data across Seattle's diverse communities</p>
+        <div className="mb-12 text-center">
+          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-gradient-to-r from-cyan-50 via-teal-50 to-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800 dark:border-cyan-800 dark:from-cyan-950/70 dark:via-teal-950/60 dark:to-amber-950/40 dark:text-cyan-200">
+            <Building2 size={14} />
+            Local Demographics
+          </p>
+          <h1 className="mb-4 text-4xl font-black tracking-tight text-slate-950 dark:text-white">Seattle Neighborhoods</h1>
+          <p className="text-xl text-slate-600 dark:text-slate-300">Explore demographic data across Seattle's diverse communities</p>
         </div>
 
         {!selectedNeighborhood && (
@@ -82,16 +91,17 @@ const SeattleNeighborhoodsPage: React.FC = () => {
             {neighborhoods.map((neighborhood) => (
               <div
                 key={neighborhood.id}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-lg hover:shadow-xl transition-shadow duration-300 overflow-hidden group"
+                className="surface group overflow-hidden transition-shadow duration-300 hover:shadow-lg"
               >
+                <div className="accent-strip" />
                 <div className="p-6">
                   <div className="flex items-center mb-4">
-                    <MapPin className="w-6 h-6 text-indigo-500 mr-2" />
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">{neighborhood.name}</h3>
+                    <MapPin className="w-6 h-6 text-cyan-600 dark:text-cyan-300 mr-2" />
+                    <h3 className="text-xl font-bold text-slate-950 dark:text-white">{neighborhood.name}</h3>
                   </div>
-                  <p className="text-gray-600 dark:text-gray-300 mb-4">{neighborhood.description}</p>
+                  <p className="text-slate-600 dark:text-slate-300 mb-4">{neighborhood.description}</p>
                   <button
-                    className="w-full bg-indigo-600 text-white py-2 px-4 rounded-lg hover:bg-indigo-700 transition-colors duration-300 group-hover:shadow-md"
+                    className="w-full rounded-md bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 font-bold text-white transition-colors duration-300 hover:from-cyan-700 hover:to-teal-700 dark:from-cyan-300 dark:to-amber-200 dark:text-slate-950"
                     onClick={() => handleNeighborhoodClick(neighborhood.name)}
                   >
                     View Demographics
@@ -113,10 +123,10 @@ const SeattleNeighborhoodsPage: React.FC = () => {
 
       {summary && summary.history && summary.forecast && (
         <div className="mt-8">
-          <h2 className="text-3xl font-bold text-center mb-6">{getDisplayName(selectedNeighborhood || '')} Demographics</h2>
+          <h2 className="text-3xl font-black text-center mb-6 text-slate-950 dark:text-white">{getDisplayName(selectedNeighborhood || '')} Demographics</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-              <h3 className="text-2xl font-semibold mb-4">Historical Population</h3>
+            <div className="surface p-6">
+              <h3 className="text-2xl font-bold mb-4 text-slate-950 dark:text-white">Historical Population</h3>
               <LineChart width={500} height={300} data={summary.history.population}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
@@ -126,8 +136,8 @@ const SeattleNeighborhoodsPage: React.FC = () => {
                 <Line type="monotone" dataKey="value" stroke="#8884d8" />
               </LineChart>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-              <h3 className="text-2xl font-semibold mb-4">Population Forecast</h3>
+            <div className="surface p-6">
+              <h3 className="text-2xl font-bold mb-4 text-slate-950 dark:text-white">Population Forecast</h3>
               <LineChart width={500} height={300} data={summary.forecast.population}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis dataKey="year" />
@@ -137,8 +147,8 @@ const SeattleNeighborhoodsPage: React.FC = () => {
                 <Line type="monotone" dataKey="value" stroke="#82ca9d" />
               </LineChart>
             </div>
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-md">
-              <h3 className="text-2xl font-semibold mb-4">Age Distribution</h3>
+            <div className="surface p-6">
+              <h3 className="text-2xl font-bold mb-4 text-slate-950 dark:text-white">Age Distribution</h3>
               <BarChart width={500} height={300} data={[
                 { name: 'Children', value: summary.ageDistribution.children },
                 { name: 'Working Age', value: summary.ageDistribution.workingAge },

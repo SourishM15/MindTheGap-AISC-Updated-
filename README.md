@@ -1,10 +1,10 @@
-# MindTheGap
+# MindThe_Gap
 
 A comprehensive dashboard for analyzing wealth inequality and economic disparities across the United States using real government data.
 
 ## Project Overview
 
-MindTheGap is an interactive platform that combines wealth inequality metrics with government economic data to provide insights into regional economic patterns. The dashboard visualizes demographic trends, employment statistics, and economic indicators to help understand wealth distribution across different regions and populations.
+MindThe_Gap is an interactive platform that combines wealth inequality metrics with government economic data to provide insights into regional economic patterns. The dashboard visualizes demographic trends, employment statistics, and economic indicators to help understand wealth distribution across different regions and populations.
 
 ## Key Features
 
