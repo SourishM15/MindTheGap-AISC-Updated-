@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
 import { US_STATES } from '../data/states';
+import LoadingSkeleton from './LoadingSkeleton';
+import MetricTooltip from './MetricTooltip';
+import SourceBadge from './SourceBadge';
 
 interface StateMetrics {
   state: string;
@@ -108,9 +111,18 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
       <div className="accent-strip" />
       <div className="p-6">
       <div className="mb-6">
-        <h3 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white mb-4">
-          Region Comparison Tool
-        </h3>
+        <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-start">
+          <div className="flex items-center gap-2">
+            <h3 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+              Region Comparison Tool
+            </h3>
+            <MetricTooltip label="Comparison Tool" description="Compare selected states against a fixed United States baseline across demographic and economic indicators." />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <SourceBadge source="ACS" year="2022" tone="cyan" />
+            <SourceBadge source="SAIPE" year="2023" tone="amber" />
+          </div>
+        </div>
         
         <div className="flex items-center space-x-2 mb-4">
           <div className="relative">
@@ -153,9 +165,7 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
       </div>
 
       {loading && selectedStates.length > 0 && (
-        <div className="text-center py-8 text-gray-600 dark:text-gray-400">
-          Loading metrics...
-        </div>
+        <LoadingSkeleton variant="dashboard" />
       )}
 
       {!loading && selectedStates.length > 0 && (

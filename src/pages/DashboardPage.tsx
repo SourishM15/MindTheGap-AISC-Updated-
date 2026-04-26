@@ -1,17 +1,27 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import FilterControls from '../components/FilterControls';
 import VisualizationPanel from '../components/VisualizationPanel';
+import InsightsSummary from '../components/InsightsSummary';
+import StateRankings from '../components/StateRankings';
 import { FilterState } from '../types';
 import { Activity, Database, MapPin } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
-  const [selectedRegion, setSelectedRegion] = useState<string>('United States');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialRegion = searchParams.get('region') || 'United States';
+  const [selectedRegion, setSelectedRegion] = useState<string>(initialRegion);
   const [filters, setFilters] = useState<FilterState>({
     region: 'us',
     timeframe: 'current',
     metrics: ['population', 'median-income', 'poverty-rate', 'education', 'unemployment', 'gini', 'income-ratio', 'wealth-top1'],
     yearRange: [2000, 2035]
   });
+
+  useEffect(() => {
+    const regionFromUrl = searchParams.get('region') || 'United States';
+    setSelectedRegion(regionFromUrl);
+  }, [searchParams]);
 
   const handleFilterChange = (newFilters: Partial<FilterState>) => {
     setFilters(prevFilters => ({
@@ -22,6 +32,11 @@ const DashboardPage: React.FC = () => {
 
   const handleRegionChange = (region: string) => {
     setSelectedRegion(region);
+    if (region === 'United States') {
+      setSearchParams({});
+    } else {
+      setSearchParams({ region });
+    }
   };
 
   return (
@@ -61,6 +76,8 @@ const DashboardPage: React.FC = () => {
         </div>
       </div>
 
+      <InsightsSummary selectedRegion={selectedRegion} context="dashboard" />
+
       <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
         <div className="lg:col-span-3">
           <FilterControls
@@ -76,6 +93,10 @@ const DashboardPage: React.FC = () => {
             selectedRegion={selectedRegion}
           />
         </div>
+      </div>
+
+      <div className="mt-8">
+        <StateRankings />
       </div>
     </main>
   );

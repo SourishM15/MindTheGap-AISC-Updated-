@@ -146,6 +146,35 @@ class CensusAPIClient:
             'source': 'default',
             'year': 2022
         }
+
+    def get_all_state_gini(self, year: Optional[int] = None) -> Dict[str, float]:
+        """Fetch ACS Gini coefficient for every state in one request."""
+        if not self.api_key:
+            return {}
+
+        target_year = year or int(self.YEAR)
+        try:
+            url = self.get_url("NAME,B19083_001E", "state:*", year=target_year)
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            rows = response.json()
+            if len(rows) < 2:
+                return {}
+
+            header = rows[0]
+            name_idx = header.index("NAME")
+            gini_idx = header.index("B19083_001E")
+
+            result: Dict[str, float] = {}
+            for row in rows[1:]:
+                try:
+                    result[row[name_idx]] = round(float(row[gini_idx]), 3)
+                except (ValueError, TypeError):
+                    continue
+            return result
+        except Exception as e:
+            logger.error(f"Error fetching all-state Gini data: {e}")
+            return {}
     
     def get_state_income_distribution(self, state_fips: str, year: Optional[int] = None) -> Dict:
         """

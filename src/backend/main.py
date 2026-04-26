@@ -86,6 +86,15 @@ def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
     if not x_admin_key or not secrets.compare_digest(x_admin_key, _ADMIN_API_KEY):
         raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
+def _recent_release_years(max_lag: int = 1, lookback: int = 8) -> list[int]:
+    """Return likely data release years, newest first.
+
+    Government datasets usually lag the calendar year, so start at current year
+    minus max_lag and walk backwards until an API returns data.
+    """
+    start = datetime.now().year - max_lag
+    return list(range(start, start - lookback, -1))
+
 # ---------------------------------------------------------------------------
 # --- Enrichment Data Loading (Government Data from Supabase Storage) ---
 @lru_cache(maxsize=1)
@@ -1784,6 +1793,70 @@ async def list_enriched_states():
         "enriched": False,
         "note": "Live data — fetched on demand from Census/SAIPE APIs"
     }
+
+@app.get("/api/state-benchmarks")
+async def get_state_benchmarks():
+    """
+    Return current all-state benchmark metrics for map, rankings, and insight cards.
+    Uses current SAIPE poverty/income estimates and ACS Gini coefficients, with
+    source metadata so the frontend can display freshness.
+    """
+    try:
+        saipe_rows = []
+        saipe_year = None
+        for candidate_year in _recent_release_years(max_lag=1, lookback=8):
+            rows = saipe_client.get_all_states_snapshot(year=candidate_year)
+            if rows:
+                saipe_rows = rows
+                saipe_year = candidate_year
+                break
+
+        gini_by_state = {}
+        acs_year = None
+        for candidate_year in _recent_release_years(max_lag=1, lookback=8):
+            rows = census_client.get_all_state_gini(year=candidate_year)
+            if rows:
+                gini_by_state = rows
+                acs_year = candidate_year
+                break
+
+        resolved_sources = {
+            "gini": {"source": "Census ACS", "year": acs_year, "status": "live" if acs_year else "unavailable"},
+            "poverty": {"source": "Census SAIPE", "year": saipe_year, "status": "live" if saipe_year else "unavailable"},
+            "income": {"source": "Census SAIPE", "year": saipe_year, "status": "live" if saipe_year else "unavailable"},
+        }
+
+        benchmarks = []
+        for row in saipe_rows:
+            state_name = row.get("state_name")
+            if not state_name:
+                continue
+            benchmarks.append({
+                "state": state_name,
+                "gini": gini_by_state.get(state_name),
+                "poverty": row.get("poverty_rate"),
+                "income": row.get("median_household_income"),
+                "sources": resolved_sources,
+            })
+
+        if not benchmarks:
+            return {
+                "success": False,
+                "benchmarks": [],
+                "message": "Live benchmark data unavailable. Check Census API key or upstream availability.",
+                "sources": resolved_sources,
+                "generated_at": datetime.now().isoformat(),
+            }
+
+        return {
+            "success": True,
+            "benchmarks": benchmarks,
+            "sources": resolved_sources,
+            "generated_at": datetime.now().isoformat(),
+        }
+    except Exception as e:
+        logger.error(f"Error fetching state benchmarks: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.post("/api/admin/enrich-metro-areas")
 async def enrich_metro_areas(_: None = Depends(_require_admin)):

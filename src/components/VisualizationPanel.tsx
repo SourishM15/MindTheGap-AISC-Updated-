@@ -7,6 +7,9 @@ import WaffleChart from './charts/WaffleChart';
 import Analysis from './Analysis';
 import RegionalComparison from './RegionalComparison';
 import { BarChart as BarChartIcon, TrendingUp, Info, PieChart, Grid3x3 } from 'lucide-react';
+import LoadingSkeleton from './LoadingSkeleton';
+import MetricTooltip from './MetricTooltip';
+import SourceBadge from './SourceBadge';
 
 interface VisualizationPanelProps {
   filters: FilterState;
@@ -309,9 +312,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
 
   if (loading) {
     return (
-      <div className="surface flex items-center justify-center p-8">
-        <div className="text-slate-600 dark:text-slate-400">Loading data for {selectedRegion}...</div>
-      </div>
+      <LoadingSkeleton variant="dashboard" />
     );
   }
 
@@ -374,6 +375,26 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
       ? `Requested ${filters.yearRange[1]} · Resolved ${incomeDistData?.year ?? 'N/A'}`
       : null;
 
+  const drillTo = (type: VisualizationType) => {
+    setVisualizationType(type);
+  };
+
+  const CardButton: React.FC<{
+    children: React.ReactNode;
+    className: string;
+    onClick: () => void;
+    title: string;
+  }> = ({ children, className, onClick, title }) => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${className} text-left ring-1 ring-transparent transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:hover:ring-cyan-700`}
+      title={title}
+    >
+      {children}
+    </button>
+  );
+
   const renderCharts = () => {
     // Metric cards are controlled by filter toggles.
     const metricsToShow = {
@@ -391,12 +412,22 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <div className="surface p-6">
           <div className="mb-4 flex justify-between items-start">
             <div>
-              <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">
-                {selectedRegion} - Key Demographics
-              </h2>
+              <div className="flex items-center gap-2">
+                <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white">
+                  {selectedRegion} - Key Demographics
+                </h2>
+                <MetricTooltip
+                  label="Metric Cards"
+                  description="Click a card to drill into the dashboard view that best explains that indicator."
+                />
+              </div>
               <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
                 Timeframe: {timeframeLabel}
               </p>
+            </div>
+            <div className="hidden flex-wrap justify-end gap-2 sm:flex">
+              <SourceBadge source={isMetro ? 'ACS' : 'ACS/SAIPE'} year={isMetro ? 2021 : saipeData?.snapshot?.year ?? 2023} tone="cyan" />
+              <SourceBadge source="DFA" year={wealthData?.data_date ?? 'Latest'} tone="violet" />
             </div>
           </div>
 
@@ -412,76 +443,104 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {metricsToShow.showPopulation && demographics.population != null && (
-              <div className="metric-card border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-900/80 dark:from-cyan-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Population</p>
+              <CardButton className="metric-card border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-900/80 dark:from-cyan-950/30 dark:to-slate-900" onClick={() => drillTo('comparison')} title="Compare population context to the USA">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Population</p>
+                  <MetricTooltip label="Population" description="Total residents in the selected region. Use this to contextualize rates and counts." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {(demographics.population / 1000000).toFixed(1)}M
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Total residents</p>
-              </div>
+                <div className="mt-3"><SourceBadge source="ACS" year={isMetro ? 2021 : 2022} tone="cyan" /></div>
+              </CardButton>
             )}
             {metricsToShow.showIncome && demographics.median_household_income != null && (
-              <div className="metric-card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/80 dark:from-emerald-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Median Income</p>
+              <CardButton className="metric-card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/80 dark:from-emerald-950/30 dark:to-slate-900" onClick={() => drillTo('stacked')} title="Open income distribution chart">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Median Income</p>
+                  <MetricTooltip label="Median Income" description="The midpoint household income: half of households earn more and half earn less." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   ${(demographics.median_household_income / 1000).toFixed(0)}K
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Household annual</p>
-              </div>
+                <div className="mt-3"><SourceBadge source={isMetro ? 'ACS' : 'ACS/SAIPE'} year={isMetro ? 2021 : saipeData?.snapshot?.year ?? 2023} tone="cyan" /></div>
+              </CardButton>
             )}
             {metricsToShow.showPoverty && demographics.poverty_rate != null && (
-              <div className="metric-card border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/80 dark:from-amber-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Poverty Rate</p>
+              <CardButton className="metric-card border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/80 dark:from-amber-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Poverty Rate</p>
+                  <MetricTooltip label="Poverty Rate" description="Share of residents living below the official poverty threshold." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {demographics.poverty_rate.toFixed(1)}%
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Below poverty line</p>
-              </div>
+                <div className="mt-3"><SourceBadge source={isMetro ? 'ACS' : 'SAIPE'} year={isMetro ? 2021 : saipeData?.snapshot?.year ?? 2023} tone="amber" /></div>
+              </CardButton>
             )}
             {metricsToShow.showEducation && demographics.education_bachelor_and_above != null && (
-              <div className="metric-card border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/80 dark:from-violet-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Education</p>
+              <CardButton className="metric-card border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/80 dark:from-violet-950/30 dark:to-slate-900" onClick={() => drillTo('comparison')} title="Compare education context to the USA">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Education</p>
+                  <MetricTooltip label="Bachelor's Degree+" description="Estimated share of adults with a bachelor's degree or higher." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {demographics.education_bachelor_and_above.toFixed(1)}%
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Bachelor's degree+</p>
-              </div>
+                <div className="mt-3"><SourceBadge source="ACS" year={isMetro ? 2021 : 2022} tone="violet" /></div>
+              </CardButton>
             )}
             {metricsToShow.showUnemployment && latestUnemploymentRate != null && (
-              <div className="metric-card border-rose-200 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/80 dark:from-rose-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Unemployment</p>
+              <CardButton className="metric-card border-rose-200 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/80 dark:from-rose-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Unemployment</p>
+                  <MetricTooltip label="Unemployment Rate" description="Latest available unemployment estimate in the region's economic time series." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {latestUnemploymentRate.toFixed(1)}%
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">Current rate</p>
-              </div>
+                <div className="mt-3"><SourceBadge source="BLS/FRED" year="Latest" tone="slate" /></div>
+              </CardButton>
             )}
             {/* SAIPE-sourced data — state-level for metros, state-level for states */}
             {metricsToShow.showChildPoverty && saipeData?.snapshot?.child_poverty_rate != null && (
-              <div className="metric-card border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900/80 dark:from-orange-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Child Poverty Rate</p>
+              <CardButton className="metric-card border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900/80 dark:from-orange-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open poverty insight analysis">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Child Poverty Rate</p>
+                  <MetricTooltip label="Child Poverty Rate" description="Estimated poverty rate for residents under age 18." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   {saipeData.snapshot.child_poverty_rate.toFixed(1)}%
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                   Under 18 · SAIPE {saipeData.snapshot.year}{isMetro ? ` · ${saipeRegionLabel} (state)` : ''}
                 </p>
-              </div>
+                <div className="mt-3"><SourceBadge source="SAIPE" year={saipeData.snapshot.year} tone="amber" /></div>
+              </CardButton>
             )}
             {/* Only show SAIPE income for states — for metros the ACS MSA income card above is
                  already present and more accurate; showing both creates confusing duplicates. */}
             {!isMetro && metricsToShow.showSaipeIncome && saipeData?.snapshot?.median_household_income != null && (
-              <div className="metric-card border-teal-200 bg-gradient-to-br from-teal-50 to-white dark:border-teal-900/80 dark:from-teal-950/30 dark:to-slate-900">
-                <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">
-                  Median Income (SAIPE)
-                </p>
+              <CardButton className="metric-card border-teal-200 bg-gradient-to-br from-teal-50 to-white dark:border-teal-900/80 dark:from-teal-950/30 dark:to-slate-900" onClick={() => drillTo('stacked')} title="Open income distribution chart">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">
+                    Median Income (SAIPE)
+                  </p>
+                  <MetricTooltip label="SAIPE Median Income" description="State-level Census SAIPE estimate used as a consistent annual benchmark." />
+                </div>
                 <p className="text-2xl font-black text-slate-950 dark:text-white mt-1">
                   ${(saipeData.snapshot.median_household_income / 1000).toFixed(0)}K
                 </p>
                 <p className="text-xs text-slate-500 dark:text-slate-500 mt-2">
                   State estimate · SAIPE {saipeData.snapshot.year}
                 </p>
-              </div>
+                <div className="mt-3"><SourceBadge source="SAIPE" year={saipeData.snapshot.year} tone="cyan" /></div>
+              </CardButton>
             )}
           </div>
         </div>

@@ -7,6 +7,7 @@ interface MapProps {
   view: 'US' | 'state';
   onStateClick: (geo: any) => void;
   selectedState?: string;
+  stateData?: Record<string, { gini: number; poverty: number; income: number }>;
 }
 
 type Metric = 'gini' | 'poverty' | 'income';
@@ -14,7 +15,7 @@ type Metric = 'gini' | 'poverty' | 'income';
 // -----------------------------------------------------------------
 // State data — Census ACS 2022 (Gini) + SAIPE 2023 (poverty/income)
 // -----------------------------------------------------------------
-const STATE_DATA: Record<string, { gini: number; poverty: number; income: number }> = {
+export const STATE_DATA: Record<string, { gini: number; poverty: number; income: number }> = {
   'Alabama':        { gini: 0.473, poverty: 16.4, income: 54943 },
   'Alaska':         { gini: 0.428, poverty:  9.9, income: 83012 },
   'Arizona':        { gini: 0.469, poverty: 12.9, income: 68319 },
@@ -67,7 +68,7 @@ const STATE_DATA: Record<string, { gini: number; poverty: number; income: number
   'Wyoming':        { gini: 0.430, poverty:  9.9, income: 72495 },
 };
 
-const METRIC_CONFIG: Record<Metric, { label: string; invert: boolean; format: (v: number) => string; min: number; max: number }> = {
+export const METRIC_CONFIG: Record<Metric, { label: string; invert: boolean; format: (v: number) => string; min: number; max: number }> = {
   gini:    { label: 'Gini Index',     invert: false, format: v => v.toFixed(3),               min: 0.426, max: 0.514  },
   poverty: { label: 'Poverty Rate',   invert: false, format: v => `${v.toFixed(1)}%`,          min: 7.2,   max: 20.3   },
   income:  { label: 'Median Income',  invert: true,  format: v => `$${(v / 1000).toFixed(0)}k`, min: 50000, max: 98500  },
@@ -109,8 +110,8 @@ function inequalityTier(gini: number): string {
 }
 
 // Rich tooltip — always shows all three metrics regardless of active choropleth mode
-function stateTooltipHtml(name: string): string {
-  const d = STATE_DATA[name];
+function stateTooltipHtml(name: string, dataSource: Record<string, { gini: number; poverty: number; income: number }>): string {
+  const d = dataSource[name];
   if (!d) return `<div style="padding:8px 12px;background:rgba(15,23,42,0.92);border-radius:8px;color:#f1f5f9;font-family:'Inter',sans-serif">${name}</div>`;
   return `
     <div style="font-family:'Inter',sans-serif;min-width:195px;padding:12px 16px;border-radius:10px;background:rgba(15,23,42,0.95);border:1px solid rgba(255,255,255,0.12);backdrop-filter:blur(8px);box-shadow:0 4px 24px rgba(0,0,0,0.55);color:#f1f5f9">
@@ -136,7 +137,7 @@ function stateTooltipHtml(name: string): string {
     </div>`;
 }
 
-const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United States' }) => {
+const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United States', stateData = STATE_DATA }) => {
   const mapRef          = useRef<L.Map | null>(null);
   const geoJsonRef      = useRef<L.GeoJSON | null>(null);
   const insetControlRef = useRef<L.Control | null>(null);
@@ -196,7 +197,7 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
 
     const getColor = (name: string, isSelected: boolean) => {
       if (isSelected) return '#38bdf8';
-      const d = STATE_DATA[name];
+      const d = stateData[name];
       if (!d) return '#475569';
       const val = metric === 'gini' ? d.gini : metric === 'poverty' ? d.poverty : d.income;
       return metricColor(val, metric);
@@ -223,7 +224,7 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
         },
         onEachFeature: (f: any, layer: L.Layer) => {
           const name = f?.properties?.name ?? '';
-          (layer as L.Path).bindTooltip(stateTooltipHtml(name), {
+          (layer as L.Path).bindTooltip(stateTooltipHtml(name, stateData), {
             sticky: true, direction: 'top', offset: [0, -6], opacity: 1, className: 'mtg-tooltip',
           });
           layer.on('click', () => { if (view === 'US') onStateClick(f); });
@@ -251,7 +252,7 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
             const wrap = L.DomUtil.create('div');
             wrap.style.cssText = 'display:flex;gap:8px;padding:8px;pointer-events:all';
             const makeBox = (feat: any, label: string) => {
-              const d = STATE_DATA[label];
+              const d = stateData[label];
               const isSelected = selectedState === label;
               const val = d ? (metric === 'gini' ? d.gini : metric === 'poverty' ? d.poverty : d.income) : 0;
               const color = isSelected ? '#38bdf8' : (d ? metricColor(val, metric) : '#475569');
@@ -312,7 +313,7 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
         map.fitBounds(L.latLngBounds(L.latLng(24, -125), L.latLng(50, -66)), { padding: [30, 30], animate: true });
       }
     }).catch(err => console.error('Failed to load map data:', err));
-  }, [selectedState, view, metric]);
+  }, [selectedState, view, metric, stateData]);
 
   return (
     <>
@@ -352,4 +353,3 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
 };
 
 export default Map;
-

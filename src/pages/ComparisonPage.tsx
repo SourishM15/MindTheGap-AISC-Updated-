@@ -1,12 +1,23 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ComparisonPanel from '../components/ComparisonPanel';
+import InsightsSummary from '../components/InsightsSummary';
 import { GitCompare, MapPinned, Scale } from 'lucide-react';
 
 const ComparisonPage: React.FC = () => {
-  const [selectedStates, setSelectedStates] = useState<string[]>([]);
+  const [searchParams] = useSearchParams();
+  const initialState = searchParams.get('state');
+  const [selectedStates, setSelectedStates] = useState<string[]>(initialState ? [initialState] : []);
+
+  useEffect(() => {
+    const stateFromUrl = searchParams.get('state');
+    if (stateFromUrl) {
+      setSelectedStates((current) => current.includes(stateFromUrl) ? current : [stateFromUrl, ...current].slice(0, 4));
+    }
+  }, [searchParams]);
 
   const handleAddState = (state: string) => {
-    if (selectedStates.length < 4) {
+    if (selectedStates.length < 4 && !selectedStates.includes(state)) {
       setSelectedStates([...selectedStates, state]);
     }
   };
@@ -52,6 +63,8 @@ const ComparisonPage: React.FC = () => {
           </div>
         </div>
       </div>
+
+      <InsightsSummary selectedRegion={selectedStates[0] || 'United States'} context="compare" />
 
       <ComparisonPanel
         selectedStates={selectedStates}
