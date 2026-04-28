@@ -173,7 +173,7 @@ class CensusAPIClient:
                     continue
             return result
         except Exception as e:
-            logger.error(f"Error fetching all-state Gini data: {e}")
+            logger.warning(f"ACS all-state Gini unavailable for {target_year}: {e}")
             return {}
     
     def get_state_income_distribution(self, state_fips: str, year: Optional[int] = None) -> Dict:

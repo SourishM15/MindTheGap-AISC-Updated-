@@ -11,6 +11,19 @@ from enum import Enum
 
 logger = logging.getLogger(__name__)
 
+US_STATES = [
+    'california', 'texas', 'florida', 'new york', 'pennsylvania',
+    'illinois', 'ohio', 'georgia', 'north carolina', 'michigan',
+    'new jersey', 'virginia', 'washington', 'arizona', 'massachusetts',
+    'tennessee', 'indiana', 'missouri', 'maryland', 'wisconsin',
+    'colorado', 'minnesota', 'south carolina', 'alabama', 'louisiana',
+    'kentucky', 'oregon', 'oklahoma', 'connecticut', 'utah',
+    'nevada', 'arkansas', 'mississippi', 'kansas', 'new mexico',
+    'nebraska', 'idaho', 'hawaii', 'maine', 'montana',
+    'south dakota', 'delaware', 'north dakota', 'alaska', 'vermont',
+    'west virginia', 'wyoming', 'rhode island'
+]
+
 
 class TopicCategory(Enum):
     """Categories of conversation topics related to wealth/inequality"""
@@ -98,12 +111,14 @@ class ConversationContextManager:
         TopicCategory.POLICY_RECOMMENDATIONS: [
             'policy', 'policies', 'reform', 'solution', 'recommend', 'suggestion',
             'should', 'could', 'government', 'increase', 'decrease', 'implement',
-            'program', 'initiative', 'intervention', 'funding'
+            'program', 'initiative', 'intervention', 'funding', 'what worked',
+            'what failed', 'evidence', 'trade-off', 'unintended consequence'
         ],
         TopicCategory.INDIVIDUAL_FINANCE: [
             'tax', 'taxes', 'deduction', 'credit', 'refund', 'debt', 'loan',
             'mortgage', 'interest rate', 'money', 'save', 'budget', 'income',
-            'paycheck', 'pocket', 'household', 'family', 'personal'
+            'paycheck', 'pocket', 'household', 'family', 'personal', 'invest',
+            'investment', 'portfolio', 'retirement', '401k', 'ira'
         ],
         TopicCategory.EMPLOYMENT: [
             'job', 'employment', 'wage', 'salary', 'work', 'career',
@@ -161,31 +176,22 @@ class ConversationContextManager:
     
     def detect_region_switch(self, current_text: str, context: ConversationContext) -> bool:
         """Detect if user is asking about a different region than current context"""
-        # List of all US states to check
-        states = [
-            'california', 'texas', 'florida', 'new york', 'pennsylvania',
-            'illinois', 'ohio', 'georgia', 'north carolina', 'michigan',
-            'new jersey', 'virginia', 'washington', 'arizona', 'massachusetts',
-            'tennessee', 'indiana', 'missouri', 'maryland', 'wisconsin',
-            'colorado', 'minnesota', 'south carolina', 'alabama', 'louisiana',
-            'kentucky', 'oregon', 'oklahoma', 'connecticut', 'utah',
-            'nevada', 'arkansas', 'mississippi', 'kansas', 'new mexico',
-            'nebraska', 'idaho', 'hawaii', 'maine', 'montana',
-            'south dakota', 'delaware', 'north dakota', 'alaska', 'vermont',
-            'west virginia', 'wyoming', 'rhode island'
-        ]
-        
         text_lower = current_text.lower()
         mentioned_region = None
         
-        for state in states:
+        for state in US_STATES:
             if state in text_lower:
                 mentioned_region = state
                 break
         
         # Check if this is different from current context
         if mentioned_region and context.current_region:
-            return mentioned_region.lower() != context.current_region.lower()
+            current_region = (
+                context.current_region.lower()
+                .replace(" state", "")
+                .replace(" metro", "")
+            )
+            return mentioned_region.lower() != current_region
         
         return False
     
@@ -203,10 +209,11 @@ class ConversationContextManager:
             prompt_parts.append(f"\nRecent Topic Changes: {' → '.join([t[0] for t in recent['recent_topics']])}")
         
         prompt_parts.append("\nINSTRUCTIONS:")
-        prompt_parts.append("1. If user asks about something different from current topic, acknowledge the topic switch explicitly")
-        prompt_parts.append("2. If user uses 'there' or 'there's' without clear referent, infer it from conversation history")
-        prompt_parts.append("3. If discussing policies, relate them back to mentioned state/region")
-        prompt_parts.append("4. Maintain consistency with previously discussed facts in this conversation")
+        prompt_parts.append("1. Resolve follow-up phrases like 'there', 'that state', 'those policies', and 'what about education' from the current topic and region.")
+        prompt_parts.append("2. If the user clearly switches topics or regions, answer the new question directly and briefly acknowledge the switch.")
+        prompt_parts.append("3. For policy/history questions, connect claims to real jurisdictions, years, programs, outcomes, and trade-offs when evidence is available.")
+        prompt_parts.append("4. For personal finance questions, provide educational context only and avoid individualized investment, tax, or legal advice.")
+        prompt_parts.append("5. Maintain consistency with previously discussed facts in this conversation.")
         
         return "\n".join(prompt_parts)
     

@@ -140,7 +140,7 @@ class SAIPEClient:
                 params={
                     "get": ",".join(SAIPE_VARS),
                     "for": geo,
-                    "time": f"from+{start_year}+to+{end_year}",
+                    "time": f"from {start_year} to {end_year}",
                     "key": self.api_key,
                 },
                 timeout=20,
@@ -166,7 +166,7 @@ class SAIPEClient:
             return sorted(results, key=lambda x: x["year"])
 
         except requests.RequestException as exc:
-            logger.error(f"SAIPE time series failed for {state_name}: {exc}")
+            logger.warning(f"SAIPE time series unavailable for {state_name}: {exc}")
             return self._fallback_time_series(state_name, start_year, end_year)
 
     # ------------------------------------------------------------------ #
@@ -205,7 +205,10 @@ class SAIPEClient:
                     results.append(parsed)
             return sorted(results, key=lambda x: x.get("state_name", ""))
         except requests.RequestException as exc:
-            logger.error(f"SAIPE all-states request failed: {exc}")
+            logger.warning(f"SAIPE all-states unavailable for {year}: {exc}")
+            return []
+        except ValueError as exc:
+            logger.warning(f"SAIPE all-states returned non-JSON for {year}: {exc}")
             return []
 
     # ------------------------------------------------------------------ #

@@ -34,6 +34,8 @@ from saipe_api_client import saipe_client, STATE_FIPS as SAIPE_STATE_FIPS
 from census_api_client import CensusAPIClient
 
 census_client = CensusAPIClient()
+_STATE_BENCHMARK_CACHE: dict = {"payload": None, "created_at": None}
+_STATE_BENCHMARK_TTL_SECONDS = 60 * 60
 
 # Configure logging
 logging.basicConfig(
@@ -86,7 +88,7 @@ def _require_admin(x_admin_key: Optional[str] = Header(default=None)) -> None:
     if not x_admin_key or not secrets.compare_digest(x_admin_key, _ADMIN_API_KEY):
         raise HTTPException(status_code=403, detail="Invalid or missing admin key")
 
-def _recent_release_years(max_lag: int = 1, lookback: int = 8) -> list[int]:
+def _recent_release_years(max_lag: int = 2, lookback: int = 8) -> list[int]:
     """Return likely data release years, newest first.
 
     Government datasets usually lag the calendar year, so start at current year
@@ -129,6 +131,7 @@ def load_enrichment_knowledge_base():
             'status': 'unavailable'
         }
 
+@lru_cache(maxsize=128)
 def load_enriched_state_profile(state_name: str) -> Optional[dict]:
     """Load enriched profile for a specific state from Supabase Storage"""
     try:
@@ -141,7 +144,7 @@ def load_enriched_state_profile(state_name: str) -> Optional[dict]:
         )
         return json.loads(raw)
     except Exception as e:
-        logger.warning(f"Could not load enriched state profile for {state_name}: {e}")
+        logger.info(f"No prebuilt enriched state profile for {state_name}; live Census/SAIPE fallback will be used")
         return None
 
 def load_enriched_metro_profile(metro_name: str) -> Optional[dict]:
@@ -418,12 +421,12 @@ class PolicyRequest(BaseModel):
 def build_conversation_messages(history: list[Message]) -> list:
     """Convert chat history to LangChain message objects for proper multi-turn continuity.
 
-    Returns the last 8 messages (4 full exchanges) so the model retains enough
+    Returns the last 12 messages (6 full exchanges) so the model retains enough
     context to answer follow-up questions about the same topic without being
     explicitly re-told the location or subject.
     """
     msgs = []
-    for msg in history[-8:]:  # 8 messages = 4 full exchanges
+    for msg in history[-12:]:  # 12 messages = 6 full exchanges
         if msg.role == "user":
             msgs.append(HumanMessage(content=msg.content))
         elif msg.role == "assistant":
@@ -431,10 +434,49 @@ def build_conversation_messages(history: list[Message]) -> list:
     return msgs
 
 
+def build_chat_preamble(context, question: str) -> str:
+    """Reusable instruction block for all chat prompts."""
+    recent = context.get_recent_context(last_n_turns=4)
+    recent_lines = []
+    for msg in recent.get("messages", [])[-4:]:
+        content = msg.get("content", "").replace("\n", " ")
+        if content:
+            recent_lines.append(f"- {msg.get('role', 'unknown')}: {content[:180]}")
+
+    recent_text = "\n".join(recent_lines) if recent_lines else "- No prior turns in this session."
+
+    return f"""Conversation State:
+- Current topic: {context.current_topic or "not established"}
+- Current region: {context.current_region or "national/general"}
+- Recent turns:
+{recent_text}
+
+Response Rules:
+- Default to 1-2 short sentences unless the user asks for detail, examples, recommendations, history, comparison, or a list.
+- Do not front-load caveats, program examples, or policy recommendations for broad questions like "what do you do?" or "tell me about Washington?"
+- Treat the user's latest message as controlling. Use previous turns to resolve pronouns and follow-ups, not to override the new question.
+- If the user asks about policy or state history, ground the answer in specific programs, places, years, measured outcomes, and trade-offs when available.
+- If the user asks about finance, taxes, investing, debt, or budgeting, give educational economic context only. Do not provide individualized financial, tax, legal, or investment advice.
+- Distinguish data from interpretation, and flag missing or limited evidence instead of inventing facts.
+
+Latest user message: {question}
+"""
+
+
+def prepend_chat_preamble(prompt_text: str, context, question: str) -> str:
+    return f"{build_chat_preamble(context, question)}\n\nTask:\n{prompt_text}"
+
+
+POLICY_FOLLOWUP_INSTRUCTION = (
+    "End with one short follow-up question inviting the user to pick a policy for more detail, "
+    "for example: 'Want me to go deeper on #1, #2, or the biggest drawback?'"
+)
+
+
 def extract_location_from_query(question: str) -> dict:
     """Extract location (state or city) from user query"""
     states = [
-        'California', 'Texas', 'Florida', 'Pennsylvania', 
+        'California', 'Texas', 'Florida', 'New York', 'Pennsylvania', 
         'Illinois', 'Ohio', 'Georgia', 'North Carolina', 'Michigan',
         'New Jersey', 'Virginia', 'Washington', 'Arizona', 'Massachusetts',
         'Tennessee', 'Indiana', 'Missouri', 'Maryland', 'Wisconsin',
@@ -455,20 +497,29 @@ def extract_location_from_query(question: str) -> dict:
     ]
     
     q_lower = question.lower()
+
+    state_context_terms = [
+        'state', 'states', 'statewide', 'governor', 'legislature', 'state history',
+        'state policy', 'state policies'
+    ]
+    city_context_terms = ['city', 'metro', 'metropolitan', 'msa', 'urban']
+
+    # Disambiguate names that can mean either a city/metro or a state.
+    if 'new york' in q_lower:
+        if any(term in q_lower for term in state_context_terms) and 'city' not in q_lower and 'metro' not in q_lower:
+            return {'type': 'state', 'name': 'New York'}
+        if any(term in q_lower for term in city_context_terms) or 'nyc' in q_lower:
+            return {'type': 'city', 'name': 'New York'}
+
+    if 'washington' in q_lower:
+        if 'dc' in q_lower or 'd.c.' in q_lower or any(term in q_lower for term in city_context_terms):
+            return {'type': 'city', 'name': 'Washington'}
+        return {'type': 'state', 'name': 'Washington'}
     
     # Priority 1: Check for explicit city mentions (with "city" or "metro" keywords)
     for city in cities:
         if city.lower() in q_lower:
-            # If also contains state name, check context to disambiguate
-            if q_lower.count('york') > 0 and 'new york' in q_lower:
-                return {'type': 'city', 'name': 'New York'}
-            elif q_lower.count('washington') > 0 and 'washington dc' in q_lower:
-                return {'type': 'city', 'name': 'Washington'}
-            elif q_lower.count('washington') > 0 and 'state of washington' not in q_lower:
-                # Default to city if just "Washington"
-                return {'type': 'city', 'name': 'Washington'}
-            elif city.lower() in q_lower:
-                return {'type': 'city', 'name': city}
+            return {'type': 'city', 'name': city}
     
     # Priority 2: Check for states (excluding those covered by cities)
     for state in states:
@@ -492,6 +543,18 @@ def extract_topic_from_history(history: list[Message]) -> dict:
             if loc["type"] is not None:
                 return loc
     return {"type": None, "name": None}
+
+
+def location_from_context_region(region: Optional[str]) -> dict:
+    """Convert the tracked conversation region back into a routeable location."""
+    if not region:
+        return {"type": None, "name": None}
+    region_lower = region.lower()
+    if region_lower.endswith(" state"):
+        return {"type": "state", "name": region[:-6]}
+    if region_lower.endswith(" metro"):
+        return {"type": "city", "name": region[:-6]}
+    return extract_location_from_query(region)
 
 
 def extract_states_from_query(question: str) -> list:
@@ -532,6 +595,132 @@ def detect_government_data_query(question: str) -> str|None:
         if any(kw in q_lower for kw in keywords_list):
             return data_type
     return None
+
+
+POLICY_KEYWORDS = [
+    'policy', 'policies', 'reform', 'legislation', 'law', 'program', 'initiative',
+    'intervention', 'fix', 'improve', 'tackle', 'address', 'solve', 'solution',
+    'recommendation', 'strategy', 'what worked', 'what has been tried',
+    'past decisions', 'proven', 'effective', 'reduce inequality', 'reduce poverty',
+    'trade-off', 'unintended consequence', 'public investment', 'tax credit',
+]
+
+HISTORY_KEYWORDS = [
+    'history', 'historical', 'past', 'previously', 'before', 'since', 'trend',
+    'over time', 'what happened', 'what changed', 'legacy', 'background',
+]
+
+PERSONAL_FINANCE_KEYWORDS = [
+    'should i invest', 'my portfolio', 'my taxes', 'my debt', 'my budget',
+    'my retirement', '401k', 'ira', 'credit card', 'student loan', 'mortgage',
+    'buy a house', 'sell my', 'pay off', 'personal finance', 'financial advice',
+]
+
+CAPABILITY_KEYWORDS = [
+    'what do you do', 'what can you do', 'what are you', 'who are you',
+    'how can you help', 'what can i ask', 'help me'
+]
+
+DETAIL_REQUEST_KEYWORDS = [
+    'detail', 'details', 'deep dive', 'explain', 'why', 'how', 'evidence',
+    'examples', 'recommend', 'recommendation', 'policy', 'policies',
+    'history', 'historical', 'compare', 'comparison', 'list', 'breakdown'
+]
+
+BROAD_LOCATION_STARTERS = [
+    'tell me about', 'what about', 'how about', 'give me a snapshot of',
+    'give me an overview of', 'overview of'
+]
+
+
+def wants_detailed_answer(question: str) -> bool:
+    q_lower = question.lower()
+    if any(q_lower.startswith(starter) for starter in BROAD_LOCATION_STARTERS):
+        detail_terms = [kw for kw in DETAIL_REQUEST_KEYWORDS if kw not in ("how",)]
+        return any(keyword in q_lower for keyword in detail_terms)
+    return any(keyword in q_lower for keyword in DETAIL_REQUEST_KEYWORDS)
+
+
+def is_capability_question(question: str) -> bool:
+    q_lower = question.lower().strip()
+    return any(keyword in q_lower for keyword in CAPABILITY_KEYWORDS)
+
+
+def is_broad_location_question(question: str) -> bool:
+    q_lower = question.lower().strip()
+    has_location = extract_location_from_query(question)["type"] is not None
+    has_broad_starter = any(q_lower.startswith(starter) for starter in BROAD_LOCATION_STARTERS)
+    return has_location and has_broad_starter and not wants_detailed_answer(question)
+
+
+def detect_policy_or_history_query(question: str, history: list[Message], topic: TopicCategory) -> bool:
+    q_lower = question.lower()
+    explicit_policy_or_history = (
+        any(keyword in q_lower for keyword in POLICY_KEYWORDS)
+        or any(keyword in q_lower for keyword in HISTORY_KEYWORDS)
+    )
+
+    if is_broad_location_question(question):
+        return False
+
+    is_policy_or_history = (
+        topic in (TopicCategory.POLICY_RECOMMENDATIONS, TopicCategory.HISTORICAL)
+        or explicit_policy_or_history
+    )
+
+    # Carry forward policy/history intent for short follow-ups such as
+    # "What about education?" or "Did it work there?"
+    if not is_policy_or_history and len(question.split()) <= 8 and history:
+        for msg in history[-6:]:
+            msg_lower = msg.content.lower()
+            if any(kw in msg_lower for kw in POLICY_KEYWORDS + HISTORY_KEYWORDS):
+                return True
+
+    return is_policy_or_history
+
+
+def detect_personal_finance_query(question: str, topic: TopicCategory) -> bool:
+    q_lower = question.lower()
+    return (
+        topic == TopicCategory.INDIVIDUAL_FINANCE
+        and any(keyword in q_lower for keyword in PERSONAL_FINANCE_KEYWORDS)
+    )
+
+
+def _compact_list(values, max_items: int = 2) -> str:
+    if not values:
+        return "not specified"
+    if not isinstance(values, list):
+        return str(values)
+    compacted = []
+    for value in values[:max_items]:
+        if isinstance(value, dict):
+            bits = [
+                str(value.get(key))
+                for key in ("program", "name", "jurisdiction", "year", "measured_outcome", "outcome")
+                if value.get(key)
+            ]
+            compacted.append(", ".join(bits) if bits else str(value))
+        else:
+            compacted.append(str(value))
+    return "; ".join(compacted) if compacted else "not specified"
+
+
+def render_policy_recommendations_context(recs: list, limit: int = 3) -> str:
+    """Serialize rich policy recommendation objects for conversational answers."""
+    lines = []
+    for i, rec in enumerate(recs[:limit], 1):
+        lines.append(
+            f"{i}. {rec.get('title', 'Policy')} ({rec.get('category', 'General')})\n"
+            f"   Summary: {rec.get('description', 'No description provided')}\n"
+            f"   Historical evidence: {rec.get('expected_impact', 'No historical analogue provided')}\n"
+            f"   Known drawback/trade-off: {_compact_list(rec.get('known_tradeoffs'), 2)}\n"
+            f"   Evidence quality: {rec.get('evidence_quality', 'not rated')}; "
+            f"implementation: {rec.get('implementation_difficulty', 'not rated')}; "
+            f"cost: {rec.get('cost_estimate', 'not rated')}\n"
+            f"   Examples: {_compact_list(rec.get('historical_examples'), 2)}"
+        )
+    return "\n".join(lines)
 
 
 def get_government_data_context(query: str, data_type: str) -> str:
@@ -598,13 +787,6 @@ async def chat(request: ChatRequest):
     # Add this exchange to context
     context.add_message(role="user", content=question, topic=topic.value)
     
-    # Build context-aware system prompt that helps LLM understand topic switches
-    context_aware_preamble = ""
-    if region_switched and context.current_region:
-        context_aware_preamble = f"Note: User is switching from discussing {context.current_region} to potentially a different region/topic. Be helpful with the topic switch.\n"
-    elif context.current_region:
-        context_aware_preamble = f"Conversation context: Currently discussing {context.current_region}. Use this context if the user references 'there' or similar pronouns.\n"
-    
     # ============= END: Conversation Context Management =============
     
     try:
@@ -616,21 +798,56 @@ async def chat(request: ChatRequest):
         data_keywords = ['compare', 'difference', 'data', 'statistics', 'tell me about', 'what is', 'how']
         is_data_query = any(keyword in question.lower() for keyword in data_keywords)
 
-        # Check if this is a policy / intervention query
-        policy_keywords = [
-            'policy', 'policies', 'reform', 'legislation', 'law', 'program', 'initiative',
-            'intervention', 'fix', 'improve', 'tackle', 'address', 'solve', 'solution',
-            'recommendation', 'strategy', 'what worked', 'what has been tried', 'history',
-            'past decisions', 'proven', 'effective', 'reduce inequality', 'reduce poverty',
-        ]
-        is_policy_query = any(keyword in question.lower() for keyword in policy_keywords)
-        # Carry forward from history: if a recent exchange touched policy, keep the flag set
-        # so follow-up questions ("What about education?") still pull policy evidence.
-        if not is_policy_query and request.conversation_history:
-            for _msg in request.conversation_history[-6:]:
-                if any(kw in _msg.content.lower() for kw in policy_keywords):
-                    is_policy_query = True
-                    break
+        is_policy_query = detect_policy_or_history_query(question, request.conversation_history, topic)
+        is_personal_finance = detect_personal_finance_query(question, topic)
+
+        if is_capability_question(question):
+            prompt_text = f"""You are the MindTheGap economics assistant.
+Answer what you do in a warm, direct way. Mention that you help with state/city comparisons, wealth inequality data, policy history, and economic context.
+Keep it to 1-2 short sentences. Do not include policy examples or statistics unless the user asks.
+
+User Question: {question}
+
+Brief Response:"""
+            llm = ChatGroq(
+                temperature=0.4,
+                groq_api_key=groq_api_key,
+                model_name=GROQ_MODEL,
+                max_tokens=90
+            )
+            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            reply = response.content if hasattr(response, 'content') else str(response)
+            context.add_message(role="assistant", content=reply, topic=topic.value)
+            return {
+                "reply": reply,
+                "source": "llm_capability",
+                "query_type": "capability_question",
+            }
+
+        if is_personal_finance:
+            prompt_text = f"""You are a careful economics educator for MindTheGap.
+The user appears to be asking a personal finance question. Answer with general educational context tied to inequality, household balance sheets, debt, taxes, or regional economics where relevant.
+Do not give individualized financial, legal, tax, or investment advice. Suggest consulting a qualified professional for decisions specific to their circumstances.
+Keep the answer practical and conversational. (2-3 sentences)
+
+User Question: {question}
+
+Educational Response:"""
+            llm = ChatGroq(
+                temperature=0.3,
+                groq_api_key=groq_api_key,
+                model_name=GROQ_MODEL,
+                max_tokens=220
+            )
+            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            reply = response.content if hasattr(response, 'content') else str(response)
+            context.add_message(role="assistant", content=reply, topic=topic.value)
+            return {
+                "reply": reply,
+                "source": "llm_finance_education",
+                "query_type": "personal_finance_education",
+            }
+
         if is_casual and not is_data_query:
             prompt_text = f"""You are a friendly wealth inequality expert AI assistant. 
 Respond warmly and naturally to this casual greeting. Keep it brief (1-2 sentences).
@@ -646,7 +863,7 @@ Response:"""
                 model_name=GROQ_MODEL,
                 max_tokens=150
             )
-            response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
             reply = response.content if hasattr(response, 'content') else str(response)
             
             # Track response in conversation context
@@ -710,7 +927,8 @@ State 2: {state2}
                 if policy_history_section:
                     prompt_text = f"""You are a wealth inequality and economics expert with deep knowledge of regional policy history.
 Compare the two states using the government data AND their documented policy histories below.
-Highlight differences in what each state tried and what the outcomes were. Be conversational. (3-4 sentences)
+Highlight differences in what each state tried, what worked or failed, and one major trade-off. Be conversational. (3-4 short sentences)
+{POLICY_FOLLOWUP_INSTRUCTION}
 
 Government Data from Census Bureau, BLS, and Federal Reserve:
 {data_context}
@@ -718,11 +936,11 @@ Government Data from Census Bureau, BLS, and Federal Reserve:
 User Question: {question}
 
 Evidence-Based Comparison:"""
-                    max_tokens = 450
+                    max_tokens = 380
                 else:
                     prompt_text = f"""You are a wealth inequality and economics expert. 
 Based on the government data below, provide a natural, articulate comparison answering the user's question.
-Focus on the key differences that matter. Be conversational, not just a list. (2-3 sentences max)
+Focus on the key differences that matter. Be conversational, not just a list. (1-2 sentences max)
 
 Government Data from Census Bureau, BLS, and Federal Reserve:
 {data_context}
@@ -730,7 +948,7 @@ Government Data from Census Bureau, BLS, and Federal Reserve:
 User Question: {question}
 
 Articulate Comparison:"""
-                    max_tokens = 250
+                    max_tokens = 160
                 
                 llm = ChatGroq(
                     temperature=0.3,
@@ -738,14 +956,14 @@ Articulate Comparison:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track comparison in conversation context
                 context.add_message(role="assistant", content=reply, topic=topic.value)
                 if len(states_in_query) >= 2:
                     # Update region if user is comparing states (track primary one)
-                    context.current_region = states_in_query[0]
+                    context.current_region = f"{states_in_query[0]} state"
                 
                 return {
                     "reply": reply,
@@ -761,6 +979,8 @@ Articulate Comparison:"""
         # from conversation history so follow-up questions resolve correctly.
         if location_info['type'] is None and request.conversation_history:
             location_info = extract_topic_from_history(request.conversation_history)
+        if location_info['type'] is None and context.current_region:
+            location_info = location_from_context_region(context.current_region)
         if location_info['type'] == 'state':
             location = location_info['name']
             state_profile = load_enriched_state_profile(location)
@@ -800,7 +1020,8 @@ Source: Census Bureau (demographics), Bureau of Labor Statistics (employment), F
                     prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
 Use the government data AND the historical policy evidence below to answer the user's question about {location}.
 Ground your response in what was actually tried in this region and what the documented outcomes were.
-Be conversational and evidence-based. (3-4 sentences)
+Mention the main historical lesson and one concrete drawback or implementation risk. Be conversational and evidence-based. (3-4 short sentences)
+{POLICY_FOLLOWUP_INSTRUCTION}
 
 Government Data:
 {data_context}
@@ -811,11 +1032,11 @@ Historical Policy Evidence for {location}:
 User Question: {question}
 
 Evidence-Based Analysis:"""
-                    max_tokens = 400
+                    max_tokens = 380
                 else:
                     prompt_text = f"""You are a wealth and economics expert analyst.
 Use the government data below to naturally answer the user's question about {location}.
-Be conversational and insightful - articulate what the data means, don't just repeat numbers. (2-3 sentences)
+Be conversational and insightful. Give a compact snapshot first; do not recommend policies unless asked. (1-2 sentences)
 
 Government Data:
 {data_context}
@@ -823,7 +1044,7 @@ Government Data:
 User Question: {question}
 
 Natural Analysis:"""
-                    max_tokens = 250
+                    max_tokens = 140
                 
                 llm = ChatGroq(
                     temperature=0.3,
@@ -831,12 +1052,12 @@ Natural Analysis:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track in conversation context
                 context.add_message(role="assistant", content=reply, topic=topic.value)
-                context.current_region = location  # Update current region for follow-up questions
+                context.current_region = f"{location} state"  # Update current region for follow-up questions
                 
                 return {
                     "reply": reply,
@@ -868,21 +1089,18 @@ Natural Analysis:"""
                     region_data=region_data,
                     policy_history_context=policy_hist,
                 )
-                rec_text = "\n".join(
-                    f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
-                    f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
-                    for i, r in enumerate(recs[:5], 1)
-                )
+                rec_text = render_policy_recommendations_context(recs, limit=3)
                 prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
 The user is asking about policy recommendations for {location}.
 
 Strict rules you must follow:
-- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
-- For each policy, state at least one documented trade-off or unintended consequence from real implementations
+- Give 2-3 policy recommendations, not all 5.
+- For each recommendation you discuss, include: why it fits this region, one historical success/failure signal, and one documented drawback or implementation risk.
 - If evidence is mixed or contested among mainstream economists, say so explicitly — do not misrepresent consensus
 - Anchor all projected impacts to measured historical outcomes, not optimistic assumptions
 - Do not advocate for any political position — your role is honest economic analysis
 - If the data for this region is limited, say so rather than extrapolating
+- {POLICY_FOLLOWUP_INSTRUCTION}
 
 Evidence-Based Policy Recommendations:
 {rec_text}
@@ -892,17 +1110,17 @@ Additional Economic Context:
 
 User Question: {question}
 
-Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
+Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-up question):"""
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
                     model_name=GROQ_MODEL,
-                    max_tokens=700,
+                    max_tokens=650,
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, "content") else str(response)
                 context.add_message(role="assistant", content=reply, topic=topic.value)
-                context.current_region = location
+                context.current_region = f"{location} state"
                 return {
                     "reply": reply,
                     "source": "policy_engine_national_baseline",
@@ -953,7 +1171,8 @@ Source: Census Bureau ACS (demographics), BLS LAUS (employment)
                     prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
 Use the metro area data AND the historical policy evidence below to answer the user's question about {city_name}.
 Ground your response in what was actually tried in this region and what the documented outcomes were.
-Be conversational and evidence-based. (3-4 sentences)
+Mention the main historical lesson and one concrete drawback or implementation risk. Be conversational and evidence-based. (3-4 short sentences)
+{POLICY_FOLLOWUP_INSTRUCTION}
 
 Government Data:
 {data_context}
@@ -964,11 +1183,11 @@ Historical Policy Evidence for {city_name}:
 User Question: {question}
 
 Evidence-Based Analysis:"""
-                    max_tokens = 400
+                    max_tokens = 380
                 else:
                     prompt_text = f"""You are a wealth and economics expert analyst.
 Use the government metro area data below to naturally answer the user's question about {city_name}.
-Be conversational and insightful - explain what the data tells us about this metro area. (2-3 sentences)
+Be conversational and insightful. Give a compact snapshot first; do not recommend policies unless asked. (1-2 sentences)
 
 Government Data:
 {data_context}
@@ -976,7 +1195,7 @@ Government Data:
 User Question: {question}
 
 Natural Analysis:"""
-                    max_tokens = 250
+                    max_tokens = 140
                 
                 llm = ChatGroq(
                     temperature=0.3,
@@ -984,13 +1203,13 @@ Natural Analysis:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track in conversation context
                 context.add_message(role="assistant", content=reply, topic=topic.value)
                 if city_name:
-                    context.current_region = city_name
+                    context.current_region = f"{city_name} metro"
                 
                 return {
                     "reply": reply,
@@ -1023,21 +1242,18 @@ Natural Analysis:"""
                     region_data=region_data,
                     policy_history_context=policy_hist,
                 )
-                rec_text = "\n".join(
-                    f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
-                    f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
-                    for i, r in enumerate(recs[:5], 1)
-                )
+                rec_text = render_policy_recommendations_context(recs, limit=3)
                 prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
 The user is asking about policy recommendations for {city_name}.
 
 Strict rules you must follow:
-- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
-- For each policy, state at least one documented trade-off or unintended consequence from real implementations
+- Give 2-3 policy recommendations, not all 5.
+- For each recommendation you discuss, include: why it fits this city, one historical success/failure signal, and one documented drawback or implementation risk.
 - If evidence is mixed or contested among mainstream economists, say so explicitly
 - Anchor all projected impacts to measured historical outcomes, not optimistic assumptions
 - Do not advocate for any political position — your role is honest economic analysis
 - If data for this city is limited, say so rather than extrapolating
+- {POLICY_FOLLOWUP_INSTRUCTION}
 
 Evidence-Based Policy Recommendations:
 {rec_text}
@@ -1047,17 +1263,17 @@ Additional Economic Context:
 
 User Question: {question}
 
-Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
+Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-up question):"""
                 llm = ChatGroq(
                     temperature=0.3,
                     groq_api_key=groq_api_key,
                     model_name=GROQ_MODEL,
-                    max_tokens=700,
+                    max_tokens=650,
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, "content") else str(response)
                 context.add_message(role="assistant", content=reply, topic=topic.value)
-                context.current_region = city_name
+                context.current_region = f"{city_name} metro"
                 return {
                     "reply": reply,
                     "source": "policy_engine_city_baseline",
@@ -1082,21 +1298,18 @@ Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag c
                 "demographics": {},
             }
             recs = get_policy_recommendations_for_region(region_data=region_data)
-            rec_text = "\n".join(
-                f"{i}. {r.get('title', 'Policy')} ({r.get('category', '')}): "
-                f"{r.get('description', '')} — Expected impact: {r.get('expected_impact', '')}"
-                for i, r in enumerate(recs[:5], 1)
-            )
+            rec_text = render_policy_recommendations_context(recs, limit=3)
             prompt_text = f"""You are a non-partisan economist committed to economic honesty and intellectual integrity.
 Answer the user's policy question using the evidence and data context below.
 
 Strict rules:
-- Cite only real, documented programs with verifiable outcomes (program name, jurisdiction, year, measured result)
-- For each policy discussed, state at least one documented trade-off or unintended consequence
+- Give 2-3 policy recommendations, not all 5.
+- For each recommendation you discuss, include: why it fits the question, one historical success/failure signal, and one documented drawback or implementation risk.
 - If evidence is mixed or contested among mainstream economists, say so explicitly
 - Anchor all impact estimates to measured historical outcomes — not optimistic projections
 - Do not advocate for any political position — present the honest empirical picture
 - Distinguish correlation from causation when discussing trends
+- {POLICY_FOLLOWUP_INSTRUCTION}
 
 Evidence-Based Policy Recommendations (national baseline):
 {rec_text}
@@ -1106,19 +1319,19 @@ Wealth Data Context:
 
 User Question: {question}
 
-Honest Policy Analysis (cite real programs and outcomes, note trade-offs, flag contested evidence, 4-6 sentences):"""
-            max_tokens = 700
+Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-up question):"""
+            max_tokens = 650
         else:
             prompt_text = f"""You are a wealth inequality and economics expert.
 Answer this question using your knowledge and the context provided.
-Be conversational and direct. (2-3 sentences max)
+Be conversational and direct. (1-2 sentences max)
 
 Context: {graph_rag_context}
 
 Question: {question}
 
 Answer:"""
-            max_tokens = 300
+            max_tokens = 160
 
         llm = ChatGroq(
             temperature=0.3,
@@ -1126,7 +1339,7 @@ Answer:"""
             model_name=GROQ_MODEL,
             max_tokens=max_tokens,
         )
-        response = llm.invoke(history_messages + [HumanMessage(content=prompt_text)])
+        response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
         reply = response.content if hasattr(response, 'content') else str(response)
 
         # Track general question in conversation context
@@ -1802,9 +2015,16 @@ async def get_state_benchmarks():
     source metadata so the frontend can display freshness.
     """
     try:
+        cached_payload = _STATE_BENCHMARK_CACHE.get("payload")
+        cached_at = _STATE_BENCHMARK_CACHE.get("created_at")
+        if cached_payload and cached_at:
+            age_seconds = (datetime.now() - cached_at).total_seconds()
+            if age_seconds < _STATE_BENCHMARK_TTL_SECONDS:
+                return cached_payload
+
         saipe_rows = []
         saipe_year = None
-        for candidate_year in _recent_release_years(max_lag=1, lookback=8):
+        for candidate_year in _recent_release_years(max_lag=2, lookback=8):
             rows = saipe_client.get_all_states_snapshot(year=candidate_year)
             if rows:
                 saipe_rows = rows
@@ -1813,7 +2033,7 @@ async def get_state_benchmarks():
 
         gini_by_state = {}
         acs_year = None
-        for candidate_year in _recent_release_years(max_lag=1, lookback=8):
+        for candidate_year in _recent_release_years(max_lag=2, lookback=8):
             rows = census_client.get_all_state_gini(year=candidate_year)
             if rows:
                 gini_by_state = rows
@@ -1840,20 +2060,26 @@ async def get_state_benchmarks():
             })
 
         if not benchmarks:
-            return {
+            payload = {
                 "success": False,
                 "benchmarks": [],
                 "message": "Live benchmark data unavailable. Check Census API key or upstream availability.",
                 "sources": resolved_sources,
                 "generated_at": datetime.now().isoformat(),
             }
+            _STATE_BENCHMARK_CACHE["payload"] = payload
+            _STATE_BENCHMARK_CACHE["created_at"] = datetime.now()
+            return payload
 
-        return {
+        payload = {
             "success": True,
             "benchmarks": benchmarks,
             "sources": resolved_sources,
             "generated_at": datetime.now().isoformat(),
         }
+        _STATE_BENCHMARK_CACHE["payload"] = payload
+        _STATE_BENCHMARK_CACHE["created_at"] = datetime.now()
+        return payload
     except Exception as e:
         logger.error(f"Error fetching state benchmarks: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")

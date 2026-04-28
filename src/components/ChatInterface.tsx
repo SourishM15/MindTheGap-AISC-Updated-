@@ -19,6 +19,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const conversationIdRef = useRef(`chat-${Date.now()}-${Math.random().toString(36).slice(2)}`);
   
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -53,6 +54,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
         },
         body: JSON.stringify({ 
           message: inputValue,
+          conversation_id: conversationIdRef.current,
           conversation_history: conversationHistory
         }),
       });

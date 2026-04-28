@@ -36,6 +36,35 @@ const fallbackSources: BenchmarkSources = {
   income: { source: 'Census SAIPE', year: 2023, status: 'fallback' },
 };
 
+type BenchmarksPayload = {
+  success?: boolean;
+  benchmarks?: StateBenchmark[];
+  sources?: BenchmarkSources;
+  generated_at?: string;
+};
+
+let sharedPayload: BenchmarksPayload | null = null;
+let sharedRequest: Promise<BenchmarksPayload> | null = null;
+
+const fetchSharedBenchmarks = async (): Promise<BenchmarksPayload> => {
+  if (sharedPayload) return sharedPayload;
+  if (!sharedRequest) {
+    sharedRequest = fetch('http://localhost:8000/api/state-benchmarks')
+      .then((response) => {
+        if (!response.ok) throw new Error('Benchmark request failed');
+        return response.json();
+      })
+      .then((payload: BenchmarksPayload) => {
+        sharedPayload = payload;
+        return payload;
+      })
+      .finally(() => {
+        sharedRequest = null;
+      });
+  }
+  return sharedRequest;
+};
+
 const toMap = (rows: StateBenchmark[]): StateBenchmarkMap => {
   return rows.reduce<StateBenchmarkMap>((acc, row) => {
     acc[row.state] = {
@@ -61,9 +90,7 @@ export const useStateBenchmarks = () => {
     const loadBenchmarks = async () => {
       setLoading(true);
       try {
-        const response = await fetch('http://localhost:8000/api/state-benchmarks');
-        if (!response.ok) throw new Error('Benchmark request failed');
-        const payload = await response.json();
+        const payload = await fetchSharedBenchmarks();
         if (cancelled) return;
 
         const fallbackByState = toMap(fallbackBenchmarks);
