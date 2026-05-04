@@ -5,7 +5,7 @@ import VisualizationPanel from '../components/VisualizationPanel';
 import InsightsSummary from '../components/InsightsSummary';
 import StateRankings from '../components/StateRankings';
 import { FilterState } from '../types';
-import { Activity, Database, MapPin } from 'lucide-react';
+import { Activity, Database } from 'lucide-react';
 
 const DashboardPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -41,40 +41,80 @@ const DashboardPage: React.FC = () => {
 
   return (
     <main className="container mx-auto px-6 py-8">
-      <div className="mb-8 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+      <section className="data-hero mb-8">
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
         <div>
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-teal-200 bg-gradient-to-r from-teal-50 via-cyan-50 to-violet-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-teal-800 dark:border-teal-800 dark:from-teal-950/70 dark:via-cyan-950/50 dark:to-violet-950/50 dark:text-teal-200">
+          <p className="hero-eyebrow mb-4">
             <Activity size={14} />
             Analytical Workspace
           </p>
-          <h2 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white md:text-4xl">
-            Dashboard
+          <h2 className="text-4xl font-black text-white md:text-6xl">
+            Inequality Command Center
           </h2>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
             Filter regions, timeframes, and indicators to inspect inequality from demographic, income, and distribution angles.
           </p>
-        </div>
-        <div className="surface-muted grid min-w-[260px] grid-cols-2 gap-3 p-3">
-          <div className="flex items-center gap-2 rounded-md bg-white/60 p-2 dark:bg-slate-950/25">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-sky-400 text-white dark:from-cyan-300 dark:to-sky-300 dark:text-slate-950">
-              <MapPin className="h-4 w-4" />
+          <div className="signal-ribbon max-w-3xl">
+            <div className="signal-pill">
+              <p className="signal-pill-label">Current view</p>
+              <p className="signal-pill-value">{selectedRegion}</p>
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Region</p>
-              <p className="text-sm font-bold text-slate-950 dark:text-white">{selectedRegion}</p>
+            <div className="signal-pill">
+              <p className="signal-pill-label">Selected metrics</p>
+              <p className="signal-pill-value">{filters.metrics.length || 'All'} indicators</p>
+            </div>
+            <div className="signal-pill">
+              <p className="signal-pill-label">Research window</p>
+              <p className="signal-pill-value">{filters.yearRange[0]}-{filters.yearRange[1]}</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-md bg-white/60 p-2 dark:bg-slate-950/25">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 to-rose-400 text-white dark:from-amber-300 dark:to-fuchsia-300 dark:text-slate-950">
-              <Database className="h-4 w-4" />
+        </div>
+        <div className="terminal-card">
+          <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-cyan-300" />
+              <p className="text-sm font-black">Current Query Stack</p>
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Metrics</p>
-              <p className="text-sm font-bold text-slate-950 dark:text-white">{filters.metrics.length || 'All'}</p>
+            <span className="rounded-md bg-emerald-400/15 px-2 py-1 text-xs font-bold text-emerald-200">READY</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="hero-stat">
+              <p className="hero-stat-label">Region</p>
+              <p className="hero-stat-value">{selectedRegion}</p>
+            </div>
+            <div className="hero-stat">
+              <p className="hero-stat-label">Metrics</p>
+              <p className="hero-stat-value">{filters.metrics.length || 'All'}</p>
+            </div>
+            <div className="hero-stat">
+              <p className="hero-stat-label">Mode</p>
+              <p className="hero-stat-value capitalize">{filters.timeframe}</p>
+            </div>
+            <div className="hero-stat">
+              <p className="hero-stat-label">Window</p>
+              <p className="hero-stat-value">{filters.yearRange[0]}-{filters.yearRange[1]}</p>
+            </div>
+          </div>
+          <div className="distribution-ladder">
+            <div className="distribution-row">
+              <span className="distribution-label">Income</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: '72%' }} /></div>
+              <span className="distribution-value">Live</span>
+            </div>
+            <div className="distribution-row">
+              <span className="distribution-label">Wealth</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: '88%' }} /></div>
+              <span className="distribution-value">DFA</span>
+            </div>
+            <div className="distribution-row">
+              <span className="distribution-label">Policy</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: '54%' }} /></div>
+              <span className="distribution-value">AI</span>
             </div>
           </div>
         </div>
       </div>
+      </section>
 
       <InsightsSummary selectedRegion={selectedRegion} context="dashboard" />
 

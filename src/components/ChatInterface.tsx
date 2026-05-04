@@ -95,7 +95,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
     <div className={`surface flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
       isExpanded ? 'h-[500px]' : 'h-[300px]'
     }`}>
-      <div className="flex items-center justify-between border-b border-slate-200 bg-gradient-to-r from-slate-950 via-cyan-950 to-teal-900 p-4 text-white dark:border-slate-800 dark:from-slate-950 dark:via-violet-950 dark:to-cyan-950">
+      <div className="flex items-center justify-between border-b border-slate-200 bg-slate-950 p-4 text-white dark:border-slate-800 dark:bg-slate-950">
         <h3 className="flex items-center text-sm font-black">
           <MessageCircle size={20} className="mr-2" />
           Economics Assistant
@@ -121,7 +121,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
           >
             <div className={`inline-block max-w-[86%] rounded-lg px-3 py-2 text-sm leading-6 shadow-sm ${
               message.role === 'user'
-                ? 'bg-cyan-600 text-white dark:bg-cyan-500 dark:text-slate-950'
+                ? 'bg-slate-950 text-white dark:bg-cyan-400 dark:text-slate-950'
                 : message.role === 'system'
                   ? 'border border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200'
                   : 'bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-100'

@@ -70,29 +70,29 @@ const LorenzCurve: React.FC<LorenzCurveProps> = ({ incomeData, title = 'Lorenz C
     'Very high inequality - concentrated wealth';
 
   return (
-    <div className="w-full h-full bg-gradient-to-br from-white to-slate-50 dark:from-gray-800 dark:to-slate-900 rounded-xl shadow-md p-6 border border-slate-200/80 dark:border-slate-700/60">
+    <div className="surface h-full w-full p-6">
       <div className="mb-5">
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-3">{title}</h3>
+        <h3 className="mb-3 text-xl font-semibold text-slate-900 dark:text-white">{title}</h3>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <div className="bg-blue-50/90 dark:bg-blue-900/40 p-4 rounded-lg border border-blue-200/60 dark:border-blue-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Gini Coefficient</p>
-            <p className="text-3xl font-bold text-blue-600 dark:text-blue-300">{gini.toFixed(3)}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{giniInterpretation}</p>
+          <div className="metric-card border-l-4 border-l-cyan-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Gini Coefficient</p>
+            <p className="text-3xl font-bold text-slate-950 dark:text-white">{gini.toFixed(3)}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{giniInterpretation}</p>
           </div>
-          <div className="bg-purple-50/90 dark:bg-purple-900/40 p-4 rounded-lg border border-purple-200/60 dark:border-purple-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Bottom 50% Own</p>
-            <p className="text-2xl font-bold text-purple-700 dark:text-purple-300">{wealthAt50.toFixed(1)}%</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Equality gap: {equalityGap50.toFixed(1)} pts</p>
+          <div className="metric-card border-l-4 border-l-violet-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Bottom 50% Own</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{wealthAt50.toFixed(1)}%</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Equality gap: {equalityGap50.toFixed(1)} pts</p>
           </div>
-          <div className="bg-amber-50/90 dark:bg-amber-900/40 p-4 rounded-lg border border-amber-200/60 dark:border-amber-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top 10% Own</p>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{top10Share.toFixed(1)}%</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Derived from cumulative curve</p>
+          <div className="metric-card border-l-4 border-l-amber-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Top 10% Own</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{top10Share.toFixed(1)}%</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Derived from cumulative curve</p>
           </div>
-          <div className="bg-emerald-50/90 dark:bg-emerald-900/40 p-4 rounded-lg border border-emerald-200/60 dark:border-emerald-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top Bracket Share</p>
-            <p className="text-2xl font-bold text-emerald-700 dark:text-emerald-300">{top1Approx != null ? `${top1Approx.toFixed(1)}%` : 'N/A'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Highest observed bracket</p>
+          <div className="metric-card border-l-4 border-l-emerald-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Top Bracket Share</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{top1Approx != null ? `${top1Approx.toFixed(1)}%` : 'N/A'}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Highest observed bracket</p>
           </div>
         </div>
       </div>
@@ -152,8 +152,8 @@ const LorenzCurve: React.FC<LorenzCurveProps> = ({ incomeData, title = 'Lorenz C
         </LineChart>
       </ResponsiveContainer>
 
-      <div className="mt-4 p-3 bg-indigo-50/90 dark:bg-indigo-900/40 rounded-lg border-l-4 border-indigo-500">
-        <p className="text-sm text-indigo-800 dark:text-indigo-200">
+      <div className="surface-muted mt-4 border-l-4 border-l-cyan-500 p-3">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
           <strong>What this shows:</strong> The blue curve represents the actual wealth distribution. 
           If it's close to the green diagonal line, wealth is distributed equally. The farther it dips below, the more concentrated wealth is among the richest.
         </p>

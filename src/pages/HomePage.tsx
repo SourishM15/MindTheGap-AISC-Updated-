@@ -24,7 +24,19 @@ const HomePage: React.FC = () => {
 
   // Detect dark mode
   useEffect(() => {
-    setIsDarkMode(document.documentElement.classList.contains('dark'));
+    const syncDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains('dark'));
+    };
+    syncDarkMode();
+
+    const observer = new MutationObserver(syncDarkMode);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    window.addEventListener('storage', syncDarkMode);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('storage', syncDarkMode);
+    };
   }, []);
 
   // Fetch state data from backend when state changes
@@ -60,7 +72,7 @@ const HomePage: React.FC = () => {
     }
   };
 
-  const handleStateClick = (geo: any) => {
+  const handleStateClick = (geo: { properties: { name: string } }) => {
     const stateName = geo.properties.name;
     setSelectedState(stateName);
   };
@@ -94,32 +106,83 @@ const HomePage: React.FC = () => {
 
   return (
     <main className="container mx-auto px-6 py-8">
-      <div className="mb-8 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-gradient-to-r from-cyan-50 via-teal-50 to-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800 dark:border-cyan-800 dark:from-cyan-950/70 dark:via-teal-950/60 dark:to-amber-950/40 dark:text-cyan-200">
+      <section className="data-hero mb-8">
+        <div className="grid gap-6 lg:grid-cols-[1fr_360px] lg:items-end">
+          <div>
+          <div className="hero-eyebrow mb-4">
             <Sparkles size={14} />
             National Inequality Atlas
           </div>
-          <h2 className="max-w-4xl text-3xl font-black tracking-tight text-slate-950 dark:text-white md:text-5xl">
+          <h2 className="max-w-4xl text-4xl font-black text-white md:text-6xl">
             See where income, wealth, and opportunity diverge across the U.S.
           </h2>
-          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
             Explore state-level patterns, then ask the assistant to explain what changed and where policy could matter most.
           </p>
-        </div>
-        <div className="surface-muted flex items-center gap-3 px-4 py-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-500 to-emerald-400 text-white shadow-sm dark:from-cyan-300 dark:to-lime-300 dark:text-slate-950">
-            <MapPinned className="h-5 w-5" />
+          <div className="signal-ribbon max-w-3xl">
+            <div className="signal-pill">
+              <p className="signal-pill-label">Data coverage</p>
+              <p className="signal-pill-value">ACS + SAIPE + DFA</p>
+            </div>
+            <div className="signal-pill">
+              <p className="signal-pill-label">Analysis lens</p>
+              <p className="signal-pill-value">Income, wealth, mobility</p>
+            </div>
+            <div className="signal-pill">
+              <p className="signal-pill-label">AI layer</p>
+              <p className="signal-pill-value">Policy signal extraction</p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">Active Region</p>
-            <p className="font-bold text-slate-950 dark:text-white">{selectedState}</p>
-            <p className="mt-1 text-xs font-medium text-slate-500 dark:text-slate-400">
-              {isLive ? 'Current data' : 'Fallback data'}{generatedAt ? ` · ${new Date(generatedAt).toLocaleDateString()}` : ''}
-            </p>
+        </div>
+          <div className="terminal-card">
+            <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <MapPinned className="h-5 w-5 text-cyan-300" />
+                <p className="text-sm font-black">Live Region Signal</p>
+              </div>
+              <span className="h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_14px_rgba(52,211,153,0.9)]" />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="hero-stat col-span-2">
+                <p className="hero-stat-label">Active region</p>
+                <p className="hero-stat-value">{selectedState}</p>
+                <p className="mt-1 text-xs font-medium text-slate-400">
+                  {isLive ? 'Current data' : 'Fallback data'}{generatedAt ? ` · ${new Date(generatedAt).toLocaleDateString()}` : ''}
+                </p>
+              </div>
+              <div className="hero-stat">
+                <p className="hero-stat-label">Gini</p>
+                <p className="hero-stat-value">{stats.gini ?? 'N/A'}</p>
+              </div>
+              <div className="hero-stat">
+                <p className="hero-stat-label">Poverty</p>
+                <p className="hero-stat-value">{stats.poverty ? `${stats.poverty}%` : 'N/A'}</p>
+              </div>
+              <div className="hero-stat col-span-2">
+                <p className="hero-stat-label">Top 1% wealth share</p>
+                <p className="hero-stat-value">{stats.wealth ? `${stats.wealth}%` : 'N/A'}</p>
+              </div>
+            </div>
+            <div className="distribution-ladder">
+              <div className="distribution-row">
+                <span className="distribution-label">Bottom</span>
+                <div className="distribution-track"><div className="distribution-fill" style={{ width: '18%' }} /></div>
+                <span className="distribution-value">20%</span>
+              </div>
+              <div className="distribution-row">
+                <span className="distribution-label">Middle</span>
+                <div className="distribution-track"><div className="distribution-fill" style={{ width: '44%' }} /></div>
+                <span className="distribution-value">50%</span>
+              </div>
+              <div className="distribution-row">
+                <span className="distribution-label">Top</span>
+                <div className="distribution-track"><div className="distribution-fill" style={{ width: '88%' }} /></div>
+                <span className="distribution-value">1%</span>
+              </div>
+            </div>
           </div>
         </div>
-      </div>
+      </section>
 
       <InsightsSummary selectedRegion={selectedState} context="home" />
 
@@ -161,7 +224,7 @@ const HomePage: React.FC = () => {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={openSelectedInDashboard}
-                    className="inline-flex items-center gap-2 rounded-md bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:from-cyan-700 hover:to-teal-700 dark:from-cyan-300 dark:to-amber-200 dark:text-slate-950"
+                    className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                   >
                     <LayoutDashboard size={16} />
                     Open Dashboard
@@ -175,7 +238,7 @@ const HomePage: React.FC = () => {
                   </button>
                   <button
                     onClick={handleShowNationalMap}
-                    className="inline-flex items-center gap-2 rounded-md bg-slate-950 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
+                    className="inline-flex items-center gap-2 rounded-md border border-slate-300 bg-white/80 px-4 py-2 text-sm font-bold text-slate-800 transition-colors hover:bg-white dark:border-slate-700 dark:bg-slate-950/40 dark:text-slate-100 dark:hover:bg-slate-900"
                   >
                     <ArrowLeft size={16} />
                     National Map
@@ -192,8 +255,8 @@ const HomePage: React.FC = () => {
                 <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div style={{ 
                     borderColor: stateColors.borderColor,
-                    borderWidth: '2px'
-                  }} className="metric-card bg-gradient-to-br from-cyan-50 to-white dark:from-cyan-950/35 dark:to-slate-900">
+                    borderLeftWidth: '4px'
+                  }} className="metric-card">
                     <div className="mb-3 flex items-center justify-between">
                       <div className="flex items-center gap-1">
                         <h3 style={{ color: isDarkMode ? stateColors.textDark : stateColors.textLight }} className="text-sm font-bold">Gini Coefficient</h3>
@@ -207,8 +270,8 @@ const HomePage: React.FC = () => {
                   </div>
                   <div style={{ 
                     borderColor: stateColors.borderColor,
-                    borderWidth: '2px'
-                  }} className="metric-card bg-gradient-to-br from-amber-50 to-white dark:from-amber-950/30 dark:to-slate-900">
+                    borderLeftWidth: '4px'
+                  }} className="metric-card">
                     <div className="flex items-center gap-1">
                       <h3 style={{ color: isDarkMode ? stateColors.textDark : stateColors.textLight }} className="text-sm font-bold">Poverty Rate</h3>
                       <MetricTooltip label="Poverty Rate" description="Share of residents living below the official poverty threshold." />
@@ -219,8 +282,8 @@ const HomePage: React.FC = () => {
                   </div>
                   <div style={{ 
                     borderColor: stateColors.borderColor,
-                    borderWidth: '2px'
-                  }} className="metric-card bg-gradient-to-br from-fuchsia-50 to-white dark:from-fuchsia-950/30 dark:to-slate-900">
+                    borderLeftWidth: '4px'
+                  }} className="metric-card">
                     <div className="flex items-center gap-1">
                       <h3 style={{ color: isDarkMode ? stateColors.textDark : stateColors.textLight }} className="text-sm font-bold">Top 1% Wealth Share</h3>
                       <MetricTooltip label="Top 1% Wealth Share" description="Estimated share of total wealth owned by the top 1% of households." />

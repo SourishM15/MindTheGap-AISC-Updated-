@@ -83,17 +83,17 @@ const StateRankings: React.FC = () => {
           </div>
         </div>
 
-        <div className="mb-3 rounded-lg border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-sm font-medium text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
+        <div className="mb-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm font-medium text-slate-700 dark:border-slate-800 dark:bg-slate-950/35 dark:text-slate-300">
           {metricHelp[metric]}
         </div>
 
         {loading && (
-          <div className="mb-3 rounded-lg border border-cyan-200 bg-cyan-50/80 px-4 py-3 text-sm font-medium text-cyan-800 dark:border-cyan-800 dark:bg-cyan-950/40 dark:text-cyan-200">
+          <div className="mb-3 rounded-lg border border-cyan-200 bg-white px-4 py-3 text-sm font-medium text-cyan-800 dark:border-cyan-900 dark:bg-slate-950/35 dark:text-cyan-200">
             Refreshing current benchmark data...
           </div>
         )}
 
-        <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-200 bg-white/75 dark:border-slate-700 dark:bg-slate-950/30">
+        <div className="max-h-[520px] overflow-auto rounded-lg border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950/30">
           <table className="w-full min-w-[760px] text-sm">
             <thead className="sticky top-0 z-10 bg-slate-100/95 text-left text-xs uppercase tracking-wide text-slate-500 backdrop-blur dark:bg-slate-900/95 dark:text-slate-400">
               <tr>
@@ -108,7 +108,7 @@ const StateRankings: React.FC = () => {
             </thead>
             <tbody className="divide-y divide-slate-200 dark:divide-slate-800">
               {rows.map((row, index) => (
-                <tr key={row.state} className="transition-colors hover:bg-cyan-50/70 dark:hover:bg-slate-800/70">
+                <tr key={row.state} className="transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/70">
                   <td className="px-4 py-3 font-black text-slate-500 dark:text-slate-400">#{index + 1}</td>
                   <td className="px-4 py-3 font-bold text-slate-950 dark:text-white">{row.state}</td>
                   <td className="px-4 py-3 text-right text-lg font-black text-cyan-700 dark:text-cyan-300">

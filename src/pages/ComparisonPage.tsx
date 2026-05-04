@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ComparisonPanel from '../components/ComparisonPanel';
 import InsightsSummary from '../components/InsightsSummary';
-import { GitCompare, MapPinned, Scale } from 'lucide-react';
+import { GitCompare, Scale } from 'lucide-react';
 
 const ComparisonPage: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -28,41 +28,79 @@ const ComparisonPage: React.FC = () => {
 
   return (
     <main className="container mx-auto px-6 py-8">
-      <div className="mb-8 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-end">
+      <section className="data-hero mb-8">
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px] lg:items-end">
         <div>
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-violet-200 bg-gradient-to-r from-violet-50 via-cyan-50 to-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-violet-800 dark:border-violet-800 dark:from-violet-950/70 dark:via-cyan-950/50 dark:to-amber-950/40 dark:text-violet-200">
+          <p className="hero-eyebrow mb-4">
             <GitCompare size={14} />
             Regional Benchmarking
           </p>
-          <h1 className="text-3xl font-black tracking-tight text-slate-950 dark:text-white md:text-4xl">
-            Compare States & Regions
+          <h1 className="text-4xl font-black text-white md:text-6xl">
+            Benchmark Regions Side by Side
           </h1>
-          <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-300">
+          <p className="mt-4 max-w-2xl text-base leading-7 text-slate-300 md:text-lg">
             Select up to 4 states to compare key economic and demographic metrics against the United States baseline.
           </p>
-        </div>
-
-        <div className="surface-muted grid min-w-[280px] grid-cols-2 gap-3 p-3">
-          <div className="flex items-center gap-2 rounded-md bg-white/60 p-2 dark:bg-slate-950/25">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-violet-500 to-cyan-400 text-white dark:from-violet-300 dark:to-cyan-300 dark:text-slate-950">
-              <MapPinned className="h-4 w-4" />
+          <div className="signal-ribbon max-w-3xl">
+            <div className="signal-pill">
+              <p className="signal-pill-label">Selection capacity</p>
+              <p className="signal-pill-value">{selectedStates.length}/4 regions</p>
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Selected</p>
-              <p className="text-sm font-bold text-slate-950 dark:text-white">{selectedStates.length}/4</p>
+            <div className="signal-pill">
+              <p className="signal-pill-label">Baseline</p>
+              <p className="signal-pill-value">United States</p>
+            </div>
+            <div className="signal-pill">
+              <p className="signal-pill-label">Benchmark mode</p>
+              <p className="signal-pill-value">Cross-state scan</p>
             </div>
           </div>
-          <div className="flex items-center gap-2 rounded-md bg-white/60 p-2 dark:bg-slate-950/25">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-gradient-to-br from-amber-400 to-rose-400 text-white dark:from-amber-300 dark:to-fuchsia-300 dark:text-slate-950">
-              <Scale className="h-4 w-4" />
+        </div>
+
+        <div className="terminal-card">
+          <div className="mb-3 flex items-center justify-between border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-cyan-300" />
+              <p className="text-sm font-black">Benchmark Console</p>
             </div>
-            <div>
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Baseline</p>
-              <p className="text-sm font-bold text-slate-950 dark:text-white">United States</p>
+            <span className="rounded-md bg-cyan-400/15 px-2 py-1 text-xs font-bold text-cyan-200">MAX 4</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="hero-stat">
+              <p className="hero-stat-label">Selected</p>
+              <p className="hero-stat-value">{selectedStates.length}/4</p>
+            </div>
+            <div className="hero-stat">
+              <p className="hero-stat-label">Baseline</p>
+              <p className="hero-stat-value">U.S.</p>
+            </div>
+            <div className="hero-stat col-span-2">
+              <p className="hero-stat-label">Active selection</p>
+              <p className="hero-stat-value text-base">
+                {selectedStates.length ? selectedStates.join(', ') : 'No states selected'}
+              </p>
+            </div>
+          </div>
+          <div className="distribution-ladder">
+            <div className="distribution-row">
+              <span className="distribution-label">Gini</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: selectedStates.length ? '78%' : '24%' }} /></div>
+              <span className="distribution-value">Rank</span>
+            </div>
+            <div className="distribution-row">
+              <span className="distribution-label">Poverty</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: selectedStates.length ? '62%' : '24%' }} /></div>
+              <span className="distribution-value">Gap</span>
+            </div>
+            <div className="distribution-row">
+              <span className="distribution-label">Income</span>
+              <div className="distribution-track"><div className="distribution-fill" style={{ width: selectedStates.length ? '84%' : '24%' }} /></div>
+              <span className="distribution-value">Delta</span>
             </div>
           </div>
         </div>
       </div>
+      </section>
 
       <InsightsSummary selectedRegion={selectedStates[0] || 'United States'} context="compare" />
 

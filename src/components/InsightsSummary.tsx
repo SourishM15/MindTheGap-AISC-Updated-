@@ -31,13 +31,13 @@ const InsightsSummary: React.FC<InsightsSummaryProps> = ({ selectedRegion = 'Uni
         icon: MapPinned,
         label: `${selectedRegion} snapshot`,
         text: `Ranks #${getRank(stateRows, selectedRegion, 'gini')} for Gini, #${getRank(stateRows, selectedRegion, 'poverty')} for poverty, and #${getRank(stateRows, selectedRegion, 'income')} for median income.`,
-        accent: 'from-cyan-500 to-teal-400',
+        accent: 'border-cyan-500 text-cyan-700 dark:text-cyan-300',
       }
     : {
         icon: Lightbulb,
         label: context === 'compare' ? 'Comparison lens' : 'National lens',
         text: 'Use the map, dashboard filters, or ranking table to move from national patterns into state-level detail.',
-        accent: 'from-cyan-500 to-violet-400',
+        accent: 'border-cyan-500 text-cyan-700 dark:text-cyan-300',
       };
 
   const insights = [
@@ -46,19 +46,19 @@ const InsightsSummary: React.FC<InsightsSummaryProps> = ({ selectedRegion = 'Uni
       icon: AlertTriangle,
       label: 'Highest inequality',
       text: `${highestGini.state} has the highest Gini index in the current state dataset at ${highestGini.gini.toFixed(3)}.`,
-      accent: 'from-rose-500 to-amber-400',
+      accent: 'border-rose-500 text-rose-700 dark:text-rose-300',
     },
     {
       icon: TrendingUp,
       label: 'Income leader',
       text: `${highestIncome.state} leads median household income at ${formatIncome(highestIncome.income)}.`,
-      accent: 'from-emerald-500 to-cyan-400',
+      accent: 'border-emerald-500 text-emerald-700 dark:text-emerald-300',
     },
     {
       icon: Lightbulb,
       label: 'Lower poverty benchmark',
       text: `${lowestPoverty.state} has the lowest poverty rate at ${lowestPoverty.poverty.toFixed(1)}%.`,
-      accent: 'from-violet-500 to-fuchsia-400',
+      accent: 'border-violet-500 text-violet-700 dark:text-violet-300',
     },
   ];
 
@@ -81,8 +81,8 @@ const InsightsSummary: React.FC<InsightsSummaryProps> = ({ selectedRegion = 'Uni
           {insights.map((insight) => {
             const Icon = insight.icon;
             return (
-              <article key={insight.label} className="metric-card">
-                <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-gradient-to-br ${insight.accent} text-white shadow-sm dark:text-slate-950`}>
+              <article key={insight.label} className={`metric-card border-l-4 ${insight.accent}`}>
+                <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-md bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200">
                   <Icon size={18} />
                 </div>
                 <p className="text-sm font-black text-slate-900 dark:text-white">{insight.label}</p>

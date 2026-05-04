@@ -32,8 +32,10 @@ from s3_data_loader import s3_loader
 from city_api_client import city_client
 from saipe_api_client import saipe_client, STATE_FIPS as SAIPE_STATE_FIPS
 from census_api_client import CensusAPIClient
+from bea_api_client import BEAAPIClient
 
 census_client = CensusAPIClient()
+bea_client = BEAAPIClient()
 _STATE_BENCHMARK_CACHE: dict = {"payload": None, "created_at": None}
 _STATE_BENCHMARK_TTL_SECONDS = 60 * 60
 
@@ -1635,6 +1637,30 @@ async def get_state_indicators(state: str):
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/state-metrics/{state_name}")
+async def get_normalized_state_metrics(state_name: str):
+    """Get latest normalized state metrics from Supabase."""
+    db = get_db()
+
+    if not db or not db.client:
+        raise HTTPException(status_code=503, detail="Database not available")
+
+    try:
+        slug = _safe_slug(state_name)
+        fips = SAIPE_STATE_FIPS.get(slug)
+        rows = db.get_latest_state_metrics(state_name=state_name, state_fips=fips)
+        return {
+            "success": True,
+            "state": state_name,
+            "count": len(rows),
+            "metrics": rows,
+            "source": "supabase:latest_state_metric_snapshots",
+        }
+    except Exception as e:
+        logger.error(f"Error fetching normalized state metrics: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.post("/api/admin/sync-government-data")
 async def sync_government_data_endpoint(_: None = Depends(_require_admin)):
     """Trigger government data sync (admin endpoint)"""
@@ -1876,6 +1902,37 @@ async def get_income_lorenz_metro(
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
+@app.get("/api/bea-state/{state_name}")
+async def get_bea_state(state_name: str):
+    """Return BEA Regional economic context for a state."""
+    try:
+        slug = _safe_slug(state_name)
+        fips = SAIPE_STATE_FIPS.get(slug)
+        if not fips or fips == "00":
+            raise HTTPException(status_code=404, detail=f"State not found: {state_name}")
+
+        data = bea_client.get_state_regional_profile(fips)
+        if not data:
+            return {
+                "success": False,
+                "state": state_name,
+                "message": "BEA data unavailable. Check BEA_API_KEY or upstream table availability.",
+                "source": "U.S. Bureau of Economic Analysis Regional API",
+            }
+
+        return {
+            "success": True,
+            "state": state_name,
+            "data": data,
+            "source": data.get("source", "U.S. Bureau of Economic Analysis Regional API"),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"BEA state error for {state_name}: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
 @app.get("/api/enriched-state/{state_name}")
 async def get_enriched_state(state_name: str):
     """Get enriched government data for a specific state, including SAIPE poverty/income."""
@@ -1910,11 +1967,21 @@ async def get_enriched_state(state_name: str):
             slug = _safe_slug(state_name)
             fips = SAIPE_STATE_FIPS.get(slug)
             census_data = {}
+            opportunity_data = {}
+            bea_data = {}
             if fips and fips != "00":
                 try:
                     census_data = census_client.get_state_demographics(fips)
                 except Exception as ce:
                     logger.warning(f"Census API failed for {state_name}: {ce}")
+                try:
+                    opportunity_data = census_client.get_state_opportunity_metrics(fips)
+                except Exception as oe:
+                    logger.warning(f"ACS opportunity data failed for {state_name}: {type(oe).__name__}")
+                try:
+                    bea_data = bea_client.get_state_regional_profile(fips)
+                except Exception as bea_err:
+                    logger.warning(f"BEA data failed for {state_name}: {type(bea_err).__name__}")
             saipe_live = {}
             try:
                 saipe_live = saipe_client.get_state_snapshot(state_name, year=2023)
@@ -1947,6 +2014,13 @@ async def get_enriched_state(state_name: str):
                     "year": 2023,
                 },
                 "saipe": saipe_live,
+                "opportunity": opportunity_data,
+                "bea": bea_data,
+                "employment": {
+                    "acs_labor": opportunity_data.get("labor", {}),
+                    "source": opportunity_data.get("source", "Census Bureau ACS") if opportunity_data else "unavailable",
+                    "year": opportunity_data.get("year"),
+                },
                 "source": "live_api",
             }
         else:
@@ -1962,12 +2036,34 @@ async def get_enriched_state(state_name: str):
                             profile["demographics"]["median_household_income"] = saipe_snapshot["median_household_income"]
             except Exception as saipe_err:
                 logger.warning(f"Could not enrich with SAIPE data: {saipe_err}")
+            try:
+                slug = _safe_slug(state_name)
+                fips = SAIPE_STATE_FIPS.get(slug) or profile.get("identity", {}).get("fips_code")
+                if fips and fips != "00":
+                    opportunity_data = census_client.get_state_opportunity_metrics(fips)
+                    if opportunity_data:
+                        profile["opportunity"] = opportunity_data
+                        profile.setdefault("employment", {})
+                        profile["employment"]["acs_labor"] = opportunity_data.get("labor", {})
+                        profile["employment"]["acs_source"] = opportunity_data.get("source", "Census Bureau ACS")
+                        profile["employment"]["acs_year"] = opportunity_data.get("year")
+            except Exception as opportunity_err:
+                logger.warning(f"Could not enrich with ACS opportunity data: {type(opportunity_err).__name__}")
+            try:
+                slug = _safe_slug(state_name)
+                fips = SAIPE_STATE_FIPS.get(slug) or profile.get("identity", {}).get("fips_code")
+                if fips and fips != "00":
+                    bea_data = bea_client.get_state_regional_profile(fips)
+                    if bea_data:
+                        profile["bea"] = bea_data
+            except Exception as bea_err:
+                logger.warning(f"Could not enrich with BEA data: {type(bea_err).__name__}")
 
         return {
             "success": True,
             "state": state_name,
             "profile": profile,
-            "data_sources": ["Census Bureau", "Bureau of Labor Statistics", "Federal Reserve (FRED)", "Census SAIPE"]
+            "data_sources": ["Census Bureau", "Bureau of Labor Statistics", "Federal Reserve (FRED)", "Census SAIPE", "Bureau of Economic Analysis"]
         }
     except Exception as e:
         logger.error(f"Error fetching enriched state data: {e}")

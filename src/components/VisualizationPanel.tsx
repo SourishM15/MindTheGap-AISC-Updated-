@@ -29,7 +29,11 @@ interface RegionData {
       unemployment_rate?: number;
     };
     economics?: {
-      indicators?: any;
+      indicators?: {
+        unemployment_rate?: {
+          data?: Record<string, number>;
+        };
+      };
     };
   };
 }
@@ -388,7 +392,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
     <button
       type="button"
       onClick={onClick}
-      className={`${className} text-left ring-1 ring-transparent transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-cyan-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:hover:ring-cyan-700`}
+      className={`${className} text-left ring-1 ring-transparent transition-all hover:-translate-y-0.5 hover:shadow-md hover:ring-slate-300 focus:outline-none focus:ring-2 focus:ring-cyan-500 dark:hover:ring-slate-700`}
       title={title}
     >
       {children}
@@ -443,7 +447,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {metricsToShow.showPopulation && demographics.population != null && (
-              <CardButton className="metric-card border-cyan-200 bg-gradient-to-br from-cyan-50 to-white dark:border-cyan-900/80 dark:from-cyan-950/30 dark:to-slate-900" onClick={() => drillTo('comparison')} title="Compare population context to the USA">
+              <CardButton className="metric-card border-l-4 border-l-cyan-500" onClick={() => drillTo('comparison')} title="Compare population context to the USA">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Population</p>
                   <MetricTooltip label="Population" description="Total residents in the selected region. Use this to contextualize rates and counts." />
@@ -456,7 +460,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               </CardButton>
             )}
             {metricsToShow.showIncome && demographics.median_household_income != null && (
-              <CardButton className="metric-card border-emerald-200 bg-gradient-to-br from-emerald-50 to-white dark:border-emerald-900/80 dark:from-emerald-950/30 dark:to-slate-900" onClick={() => drillTo('stacked')} title="Open income distribution chart">
+              <CardButton className="metric-card border-l-4 border-l-emerald-500" onClick={() => drillTo('stacked')} title="Open income distribution chart">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Median Income</p>
                   <MetricTooltip label="Median Income" description="The midpoint household income: half of households earn more and half earn less." />
@@ -469,7 +473,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               </CardButton>
             )}
             {metricsToShow.showPoverty && demographics.poverty_rate != null && (
-              <CardButton className="metric-card border-amber-200 bg-gradient-to-br from-amber-50 to-white dark:border-amber-900/80 dark:from-amber-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
+              <CardButton className="metric-card border-l-4 border-l-amber-500" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Poverty Rate</p>
                   <MetricTooltip label="Poverty Rate" description="Share of residents living below the official poverty threshold." />
@@ -482,7 +486,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               </CardButton>
             )}
             {metricsToShow.showEducation && demographics.education_bachelor_and_above != null && (
-              <CardButton className="metric-card border-violet-200 bg-gradient-to-br from-violet-50 to-white dark:border-violet-900/80 dark:from-violet-950/30 dark:to-slate-900" onClick={() => drillTo('comparison')} title="Compare education context to the USA">
+              <CardButton className="metric-card border-l-4 border-l-violet-500" onClick={() => drillTo('comparison')} title="Compare education context to the USA">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Education</p>
                   <MetricTooltip label="Bachelor's Degree+" description="Estimated share of adults with a bachelor's degree or higher." />
@@ -495,7 +499,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
               </CardButton>
             )}
             {metricsToShow.showUnemployment && latestUnemploymentRate != null && (
-              <CardButton className="metric-card border-rose-200 bg-gradient-to-br from-rose-50 to-white dark:border-rose-900/80 dark:from-rose-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
+              <CardButton className="metric-card border-l-4 border-l-rose-500" onClick={() => drillTo('analysis')} title="Open economic insight analysis">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Unemployment</p>
                   <MetricTooltip label="Unemployment Rate" description="Latest available unemployment estimate in the region's economic time series." />
@@ -509,7 +513,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             )}
             {/* SAIPE-sourced data — state-level for metros, state-level for states */}
             {metricsToShow.showChildPoverty && saipeData?.snapshot?.child_poverty_rate != null && (
-              <CardButton className="metric-card border-orange-200 bg-gradient-to-br from-orange-50 to-white dark:border-orange-900/80 dark:from-orange-950/30 dark:to-slate-900" onClick={() => drillTo('analysis')} title="Open poverty insight analysis">
+              <CardButton className="metric-card border-l-4 border-l-orange-500" onClick={() => drillTo('analysis')} title="Open poverty insight analysis">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">Child Poverty Rate</p>
                   <MetricTooltip label="Child Poverty Rate" description="Estimated poverty rate for residents under age 18." />
@@ -526,7 +530,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
             {/* Only show SAIPE income for states — for metros the ACS MSA income card above is
                  already present and more accurate; showing both creates confusing duplicates. */}
             {!isMetro && metricsToShow.showSaipeIncome && saipeData?.snapshot?.median_household_income != null && (
-              <CardButton className="metric-card border-teal-200 bg-gradient-to-br from-teal-50 to-white dark:border-teal-900/80 dark:from-teal-950/30 dark:to-slate-900" onClick={() => drillTo('stacked')} title="Open income distribution chart">
+              <CardButton className="metric-card border-l-4 border-l-teal-500" onClick={() => drillTo('stacked')} title="Open income distribution chart">
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm text-slate-600 dark:text-slate-400 font-bold">
                     Median Income (SAIPE)
@@ -594,7 +598,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           disabled={!canShowLorenz}
           className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'lorenz'
-              ? 'bg-cyan-600 text-white dark:bg-cyan-400 dark:text-slate-950'
+              ? 'control-button-active'
               : 'control-button-idle'
           }`}
           title="Shows wealth distribution with Gini coefficient"
@@ -608,7 +612,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           disabled={!canShowDistribution}
           className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'stacked'
-              ? 'bg-emerald-600 text-white dark:bg-emerald-400 dark:text-slate-950'
+              ? 'control-button-active'
               : 'control-button-idle'
           }`}
           title="Shows income distribution by decile over time"
@@ -622,7 +626,7 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
           disabled={!canShowDistribution}
           className={`control-button flex items-center gap-2 disabled:cursor-not-allowed disabled:opacity-45 ${
             visualizationType === 'waffle'
-              ? 'bg-violet-600 text-white dark:bg-violet-400 dark:text-slate-950'
+              ? 'control-button-active'
               : 'control-button-idle'
           }`}
           title="100-square grid showing population distribution"
@@ -658,33 +662,33 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <div>
           {/* Context banner: MSA data for metros, SAIPE for states */}
           {isMetro && demographics.population != null ? (
-            <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-indigo-800 dark:text-indigo-300">
+            <div className="surface-muted mb-4 flex flex-wrap gap-6 p-4 text-sm">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedRegion} Metro Statistical Area · ACS 2021
               </span>
               {demographics.poverty_rate != null && (
-                <span className="text-gray-700 dark:text-gray-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
               )}
               {demographics.median_household_income != null && (
-                <span className="text-gray-700 dark:text-gray-300">MSA Median Income: <strong>${demographics.median_household_income.toLocaleString()}</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">MSA Median Income: <strong>${demographics.median_household_income.toLocaleString()}</strong></span>
               )}
-              <span className="text-xs text-indigo-500 dark:text-indigo-400 ml-auto">Source: Census Bureau ACS (MSA-level)</span>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">Source: Census Bureau ACS (MSA-level)</span>
             </div>
           ) : saipeData?.snapshot ? (
-            <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/30 border border-indigo-200 dark:border-indigo-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-indigo-800 dark:text-indigo-300">
+            <div className="surface-muted mb-4 flex flex-wrap gap-6 p-4 text-sm">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedRegion} · SAIPE {saipeData.snapshot.year}
               </span>
               {saipeData.snapshot.poverty_rate != null && (
-                <span className="text-gray-700 dark:text-gray-300">Poverty Rate: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">Poverty Rate: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
               )}
               {saipeData.snapshot.child_poverty_rate != null && (
-                <span className="text-gray-700 dark:text-gray-300">Child Poverty: <strong>{saipeData.snapshot.child_poverty_rate.toFixed(1)}%</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">Child Poverty: <strong>{saipeData.snapshot.child_poverty_rate.toFixed(1)}%</strong></span>
               )}
               {saipeData.snapshot.median_household_income != null && (
-                <span className="text-gray-700 dark:text-gray-300">Median Income: <strong>${saipeData.snapshot.median_household_income.toLocaleString()}</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">Median Income: <strong>${saipeData.snapshot.median_household_income.toLocaleString()}</strong></span>
               )}
-              <span className="text-xs text-indigo-500 dark:text-indigo-400 ml-auto">Source: Census Bureau SAIPE</span>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">Source: Census Bureau SAIPE</span>
             </div>
           ) : null}
           <LorenzCurve
@@ -712,30 +716,30 @@ const VisualizationPanel: React.FC<VisualizationPanelProps> = ({ filters, select
         <div>
           {/* Context banner: MSA data for metros, SAIPE for states */}
           {isMetro && demographics.population != null ? (
-            <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-purple-800 dark:text-purple-300">
+            <div className="surface-muted mb-4 flex flex-wrap gap-6 p-4 text-sm">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedRegion} Metro Statistical Area · ACS 2021
               </span>
               {demographics.poverty_rate != null && (
-                <span className="text-gray-700 dark:text-gray-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">MSA Poverty Rate: <strong>{demographics.poverty_rate.toFixed(1)}%</strong></span>
               )}
               {demographics.poverty_rate != null && demographics.population != null && (
-                <span className="text-gray-700 dark:text-gray-300">In Poverty: <strong>{Math.round(demographics.population * demographics.poverty_rate / 100).toLocaleString()}</strong> people</span>
+                <span className="text-slate-700 dark:text-slate-300">In Poverty: <strong>{Math.round(demographics.population * demographics.poverty_rate / 100).toLocaleString()}</strong> people</span>
               )}
-              <span className="text-xs text-purple-500 dark:text-purple-400 ml-auto">Source: Census Bureau ACS (MSA-level)</span>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">Source: Census Bureau ACS (MSA-level)</span>
             </div>
           ) : saipeData?.snapshot ? (
-            <div className="mb-4 bg-purple-50 dark:bg-purple-900/30 border border-purple-200 dark:border-purple-700 rounded-lg p-4 flex flex-wrap gap-6 text-sm">
-              <span className="font-semibold text-purple-800 dark:text-purple-300">
+            <div className="surface-muted mb-4 flex flex-wrap gap-6 p-4 text-sm">
+              <span className="font-semibold text-slate-900 dark:text-white">
                 {selectedRegion} · SAIPE {saipeData.snapshot.year}
               </span>
               {saipeData.snapshot.poverty_rate != null && (
-                <span className="text-gray-700 dark:text-gray-300">All-age Poverty: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
+                <span className="text-slate-700 dark:text-slate-300">All-age Poverty: <strong>{saipeData.snapshot.poverty_rate.toFixed(1)}%</strong></span>
               )}
               {saipeData.snapshot.poverty_count != null && (
-                <span className="text-gray-700 dark:text-gray-300">In Poverty: <strong>{saipeData.snapshot.poverty_count.toLocaleString()}</strong> people</span>
+                <span className="text-slate-700 dark:text-slate-300">In Poverty: <strong>{saipeData.snapshot.poverty_count.toLocaleString()}</strong> people</span>
               )}
-              <span className="text-xs text-purple-500 dark:text-purple-400 ml-auto">Source: Census Bureau SAIPE</span>
+              <span className="ml-auto text-xs text-slate-500 dark:text-slate-400">Source: Census Bureau SAIPE</span>
             </div>
           ) : null}
           <WaffleChart

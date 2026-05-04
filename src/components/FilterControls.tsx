@@ -30,7 +30,6 @@ const FilterControls: React.FC<FilterControlsProps> = ({
   });
 
   const isMetroSelection = MAJOR_METRO_AREAS.includes(selectedRegion) || selectedRegion.endsWith(' Metro');
-  const isUnitedStates = selectedRegion === 'United States';
 
   const getYearBounds = (timeframe: FilterState['timeframe']): [number, number] => {
     if (timeframe === 'current') return [2019, 2025];

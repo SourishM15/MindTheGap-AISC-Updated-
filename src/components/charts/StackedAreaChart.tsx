@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 
 interface StackedAreaChartProps {
   data: {
@@ -34,7 +34,6 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
   const [hiddenDeciles, setHiddenDeciles] = useState<Set<string>>(new Set());
 
   const latest = data.length ? data[data.length - 1] : null;
-  const first = data.length ? data[0] : null;
   const latestTop1 = latest && typeof latest['Top 1%'] === 'number' ? latest['Top 1%'] : null;
   const latestBottom20 = latest && typeof latest['Bottom 20%'] === 'number' ? latest['Bottom 20%'] : null;
   const concentrationRatio = latestTop1 != null && latestBottom20 != null && latestBottom20 > 0
@@ -64,25 +63,25 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
   };
 
   return (
-    <div className="w-full h-full bg-gradient-to-br from-white to-slate-50 dark:from-gray-800 dark:to-slate-900 rounded-xl shadow-md p-6 border border-slate-200/80 dark:border-slate-700/60">
+    <div className="surface h-full w-full p-6">
       <div className="mb-4">
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200 mb-4">{title}</h3>
+        <h3 className="mb-4 text-xl font-semibold text-slate-900 dark:text-white">{title}</h3>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-          <div className="p-3 rounded-lg bg-blue-50/90 dark:bg-blue-900/40 border border-blue-200/60 dark:border-blue-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Latest Year</p>
-            <p className="text-2xl font-bold text-blue-700 dark:text-blue-300">{latest ? latest.year : 'N/A'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{data.length > 3 ? 'Trend series' : 'Snapshot view'}</p>
+          <div className="metric-card border-l-4 border-l-cyan-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Latest Year</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{latest ? latest.year : 'N/A'}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{data.length > 3 ? 'Trend series' : 'Snapshot view'}</p>
           </div>
-          <div className="p-3 rounded-lg bg-amber-50/90 dark:bg-amber-900/40 border border-amber-200/60 dark:border-amber-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top 20% Share</p>
-            <p className="text-2xl font-bold text-amber-700 dark:text-amber-300">{topBandLatest != null ? `${topBandLatest.toFixed(1)}%` : 'N/A'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">80-99% + Top 1%</p>
+          <div className="metric-card border-l-4 border-l-amber-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Top 20% Share</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{topBandLatest != null ? `${topBandLatest.toFixed(1)}%` : 'N/A'}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">80-99% + Top 1%</p>
           </div>
-          <div className="p-3 rounded-lg bg-rose-50/90 dark:bg-rose-900/40 border border-rose-200/60 dark:border-rose-700/50">
-            <p className="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Top1 / Bottom20 Ratio</p>
-            <p className="text-2xl font-bold text-rose-700 dark:text-rose-300">{concentrationRatio != null ? `${concentrationRatio.toFixed(1)}x` : 'N/A'}</p>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">Higher means more concentration</p>
+          <div className="metric-card border-l-4 border-l-rose-500">
+            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Top1 / Bottom20 Ratio</p>
+            <p className="text-2xl font-bold text-slate-950 dark:text-white">{concentrationRatio != null ? `${concentrationRatio.toFixed(1)}x` : 'N/A'}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Higher means more concentration</p>
           </div>
         </div>
         
@@ -98,7 +97,7 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
                 onClick={() => toggleDecile(decile)}
                 className={`p-2 rounded border-2 transition-all text-sm ${
                   isHidden
-                    ? 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-700 opacity-50'
+                    ? 'border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-800 opacity-50'
                     : 'border-opacity-100 bg-opacity-100'
                 }`}
                 style={{
@@ -108,7 +107,7 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
                     : DECILE_COLORS[decile as keyof typeof DECILE_COLORS] + '20'
                 }}
               >
-                <div className="font-semibold text-gray-800 dark:text-gray-200">{decile}</div>
+                <div className="font-semibold text-slate-800 dark:text-slate-200">{decile}</div>
                 {change !== null && (
                   <div className={`text-xs ${change > 0 ? 'text-green-600' : 'text-red-600'}`}>
                     {change > 0 ? '+' : ''}{change.toFixed(1)}%
@@ -164,8 +163,8 @@ const StackedAreaChart: React.FC<StackedAreaChartProps> = ({
         </AreaChart>
       </ResponsiveContainer>
 
-      <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900 rounded border-l-4 border-blue-500">
-        <p className="text-sm text-blue-800 dark:text-blue-200">
+      <div className="surface-muted mt-4 border-l-4 border-l-cyan-500 p-3">
+        <p className="text-sm text-slate-700 dark:text-slate-300">
           <strong>How to read:</strong> Each colored area represents one income decile. Higher areas = larger share of total income. 
           Click deciles to hide/show them. Watch for areas expanding (inequality) or contracting (equality).
         </p>

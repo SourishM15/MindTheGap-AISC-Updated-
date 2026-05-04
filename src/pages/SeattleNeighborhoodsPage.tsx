@@ -4,6 +4,7 @@ import { getDemographicsSummary } from '../data/seattleDemographics';
 import DemographicsModal from '../components/DemographicsModal';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { LineChart, BarChart, XAxis, YAxis, Tooltip, Legend, Line, Bar, CartesianGrid } from 'recharts';
+import { DemographicsSummary } from '../types/demographics';
 
 const neighborhoods = [
   { id: 'ballard', name: 'Ballard', description: 'Historic maritime district known for craft breweries and the Hiram M. Chittenden Locks' },
@@ -19,7 +20,7 @@ const neighborhoods = [
 const SeattleNeighborhoodsPage: React.FC = () => {
   const { neighborhoodName } = useParams<{ neighborhoodName: string }>();
   const [selectedNeighborhood, setSelectedNeighborhood] = useState<string | null>(neighborhoodName || null);
-  const [demographicsData, setDemographicsData] = useState<any | null>(() => {
+  const [demographicsData, setDemographicsData] = useState<DemographicsSummary | null>(() => {
     if (neighborhoodName) {
       return getDemographicsSummary(neighborhoodName);
     }
@@ -78,7 +79,7 @@ const SeattleNeighborhoodsPage: React.FC = () => {
     <main className="container mx-auto px-4 py-8">
       <div className="max-w-6xl mx-auto">
         <div className="mb-12 text-center">
-          <p className="mb-3 inline-flex items-center gap-2 rounded-full border border-cyan-200 bg-gradient-to-r from-cyan-50 via-teal-50 to-amber-50 px-3 py-1 text-xs font-bold uppercase tracking-wide text-cyan-800 dark:border-cyan-800 dark:from-cyan-950/70 dark:via-teal-950/60 dark:to-amber-950/40 dark:text-cyan-200">
+          <p className="eyebrow mb-3">
             <Building2 size={14} />
             Local Demographics
           </p>
@@ -101,7 +102,7 @@ const SeattleNeighborhoodsPage: React.FC = () => {
                   </div>
                   <p className="text-slate-600 dark:text-slate-300 mb-4">{neighborhood.description}</p>
                   <button
-                    className="w-full rounded-md bg-gradient-to-r from-cyan-600 to-teal-600 px-4 py-2 font-bold text-white transition-colors duration-300 hover:from-cyan-700 hover:to-teal-700 dark:from-cyan-300 dark:to-amber-200 dark:text-slate-950"
+                    className="w-full rounded-md bg-slate-950 px-4 py-2 font-bold text-white transition-colors duration-300 hover:bg-slate-800 dark:bg-cyan-400 dark:text-slate-950 dark:hover:bg-cyan-300"
                     onClick={() => handleNeighborhoodClick(neighborhood.name)}
                   >
                     View Demographics

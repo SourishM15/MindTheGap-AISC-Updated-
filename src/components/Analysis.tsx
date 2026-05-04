@@ -4,18 +4,21 @@ import { FilterState } from '../types';
 interface AnalysisProps {
   filters: FilterState;
   selectedRegion?: string;
-  regionData?: any;
-}
-
-interface RegionMetrics {
-  population?: number;
-  medianIncome?: number;
-  povertyRate?: number;
-  educationRate?: number;
-  unemploymentRate?: number;
+  regionData?: {
+    profile?: {
+      demographics?: {
+        median_household_income?: number;
+        population?: number;
+        poverty_rate?: number;
+        education_bachelor_and_above?: number;
+      };
+    };
+  };
 }
 
 const Analysis: React.FC<AnalysisProps> = ({ filters, selectedRegion = 'United States', regionData }) => {
+  void filters;
+
   const getAnalysisText = (): { title: string; content: React.ReactNode } => {
     const demographics = regionData?.profile?.demographics || {};
     
@@ -61,14 +64,14 @@ const Analysis: React.FC<AnalysisProps> = ({ filters, selectedRegion = 'United S
   const analysis = getAnalysisText();
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-4">
-      <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-200 border-b pb-2">{analysis.title}</h3>
-      <div className="text-gray-700 dark:text-gray-300">
+    <div className="surface p-5">
+      <h3 className="mb-4 border-b border-slate-200 pb-3 text-xl font-semibold text-slate-900 dark:border-slate-800 dark:text-white">{analysis.title}</h3>
+      <div className="leading-7 text-slate-700 dark:text-slate-300">
         {analysis.content}
       </div>
-      <div className="mt-4 bg-indigo-50 dark:bg-indigo-900 border-l-4 border-indigo-500 p-3 rounded">
-        <h4 className="font-semibold text-indigo-700 dark:text-indigo-300 mb-1">Regional Insights</h4>
-        <p className="text-indigo-800 dark:text-indigo-200 text-sm">
+      <div className="surface-muted mt-4 border-l-4 border-l-cyan-500 p-3">
+        <h4 className="mb-1 font-semibold text-slate-900 dark:text-white">Regional Insights</h4>
+        <p className="text-sm text-slate-700 dark:text-slate-300">
           Explore the Compare Regions page to see how {selectedRegion} stacks up against other states and metros. 
           Use the chart options above to visualize different economic indicators.
         </p>

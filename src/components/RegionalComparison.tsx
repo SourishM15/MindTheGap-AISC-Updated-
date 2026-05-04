@@ -1,18 +1,30 @@
 import React, { useState, useEffect } from 'react';
-import { BarChart as BarChartIcon, LineChart as LineChartIcon, TrendingUp } from 'lucide-react';
+import { BarChart as BarChartIcon, TrendingUp } from 'lucide-react';
 
 interface RegionalComparisonProps {
   selectedRegion: string;
-  regionData: any;
+  regionData: RegionalData;
 }
 
 type ChartType = 'metrics' | 'vs-usa' | 'chart' | 'trend';
+
+interface RegionalData {
+  state?: string;
+  profile?: {
+    demographics?: {
+      population?: number;
+      median_household_income?: number;
+      poverty_rate?: number;
+      education_bachelor_and_above?: number;
+    };
+  };
+}
 
 const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion, regionData }) => {
   const [chartType, setChartType] = useState<ChartType>('metrics');
   
   // Initialize with USA baseline so it's always available
-  const [usaData, setUsaData] = useState<any>({
+  const [usaData, setUsaData] = useState<RegionalData>({
     state: 'United States',
     profile: {
       demographics: {
@@ -104,23 +116,23 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
         if (metric.regionValue === undefined) return null;
 
         return (
-          <div key={idx} className="bg-white dark:bg-gray-700 rounded-lg p-5 border-l-4 border-indigo-500 hover:shadow-lg transition-shadow">
+          <div key={idx} className="metric-card border-l-4 border-l-cyan-500">
             <div className="flex justify-between items-start mb-3">
-              <h3 className="font-semibold text-gray-800 dark:text-gray-200">{metric.label}</h3>
+              <h3 className="font-semibold text-slate-800 dark:text-slate-200">{metric.label}</h3>
             </div>
             
             {/* Main value */}
             <div className="mb-4">
-              <p className="text-3xl font-bold text-gray-900 dark:text-gray-100">
+              <p className="text-3xl font-bold text-slate-900 dark:text-white">
                 {metric.format(metric.regionValue)}
               </p>
             </div>
 
             {/* Visual bar representation */}
             <div className="mb-4">
-              <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-3 overflow-hidden">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                 <div
-                  className="bg-gradient-to-r from-blue-400 to-blue-600 h-full rounded-full transition-all duration-300"
+                  className="h-full rounded-full bg-slate-950 transition-all duration-300 dark:bg-cyan-400"
                   style={{ width: '85%' }}
                 />
               </div>
@@ -128,9 +140,9 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
 
             {/* USA comparison if available */}
             {metric.usaValue !== undefined && (
-              <div className="pt-3 border-t border-gray-300 dark:border-gray-600">
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">USA Average</p>
-                <p className="text-lg font-semibold text-gray-700 dark:text-gray-300">{metric.format(metric.usaValue)}</p>
+              <div className="border-t border-slate-200 pt-3 dark:border-slate-800">
+                <p className="mb-2 text-xs text-slate-500 dark:text-slate-400">USA Average</p>
+                <p className="text-lg font-semibold text-slate-700 dark:text-slate-300">{metric.format(metric.usaValue)}</p>
               </div>
             )}
           </div>
@@ -141,7 +153,7 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
 
   const renderComparisonView = () => {
     if (loading) {
-      return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Loading USA baseline data...</div>;
+      return <div className="py-8 text-center text-slate-600 dark:text-slate-400">Loading USA baseline data...</div>;
     }
 
     if (!usaData) {
@@ -167,13 +179,11 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
           // Calculate bar widths for visualization
           const maxValue = Math.max(metric.regionValue, metric.usaValue);
           const regionBarWidth = (metric.regionValue / maxValue) * 100;
-          const usaBarWidth = (metric.usaValue / maxValue) * 100;
-
           return (
-            <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-lg p-6 bg-white dark:bg-gray-700">
+            <div key={idx} className="metric-card">
               {/* Metric header */}
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">{metric.label}</h3>
+                <h3 className="text-lg font-semibold text-slate-900 dark:text-white">{metric.label}</h3>
                 <span className={`text-xl font-bold ${statusColor}`}>
                   {difference >= 0 ? '+' : ''}{difference.toFixed(1)}%
                 </span>
@@ -184,12 +194,12 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
                 {/* Region bar */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{selectedRegion}</span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{metric.format(metric.regionValue)}</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">{selectedRegion}</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{metric.format(metric.regionValue)}</span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-8 overflow-hidden">
+                  <div className="h-8 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                     <div
-                      className="bg-blue-500 dark:bg-blue-600 h-full rounded-full flex items-center justify-end pr-2 transition-all duration-300"
+                      className="flex h-full items-center justify-end rounded-full bg-slate-950 pr-2 transition-all duration-300 dark:bg-cyan-400"
                       style={{ width: `${regionBarWidth}%` }}
                     >
                       {regionBarWidth > 20 && (
@@ -202,12 +212,12 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
                 {/* USA bar */}
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-sm font-medium text-gray-700 dark:text-gray-300">USA Average</span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{metric.format(metric.usaValue)}</span>
+                    <span className="text-sm font-medium text-slate-700 dark:text-slate-300">USA Average</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{metric.format(metric.usaValue)}</span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-full h-8 overflow-hidden">
+                  <div className="h-8 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
                     <div
-                      className="bg-indigo-500 dark:bg-indigo-600 h-full rounded-full flex items-center justify-end pr-2 transition-all duration-300"
+                      className="flex h-full items-center justify-end rounded-full bg-slate-500 pr-2 transition-all duration-300 dark:bg-slate-600"
                       style={{ width: '100%' }}
                     >
                       <span className="text-xs font-bold text-white">100%</span>
@@ -217,8 +227,8 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
               </div>
 
               {/* Status indicator */}
-              <div className="mt-4 pt-4 border-t border-gray-300 dark:border-gray-600">
-                <p className="text-sm text-gray-600 dark:text-gray-400">
+              <div className="mt-4 border-t border-slate-200 pt-4 dark:border-slate-800">
+                <p className="text-sm text-slate-600 dark:text-slate-400">
                   {isAboveAverage
                     ? `${selectedRegion} is ${Math.abs(difference).toFixed(1)}% ${
                         metric.inverse ? 'lower' : 'higher'
@@ -236,11 +246,11 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
   };
 
   const renderTrendView = () => (
-    <div className="bg-white dark:bg-gray-700 rounded-lg p-6">
-      <p className="text-center text-gray-600 dark:text-gray-400">
+    <div className="surface-muted p-6">
+      <p className="text-center text-slate-600 dark:text-slate-400">
         Economic indicators for {selectedRegion} are displayed in the key demographics section above.
       </p>
-      <p className="text-center text-sm text-gray-500 dark:text-gray-500 mt-3">
+      <p className="mt-3 text-center text-sm text-slate-500 dark:text-slate-500">
         Time-series data and forecasts will be available in future updates.
       </p>
     </div>
@@ -248,12 +258,12 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
 
   const renderChartView = () => {
     if (loading) {
-      return <div className="text-center py-8 text-gray-600 dark:text-gray-400">Loading USA data...</div>;
+      return <div className="py-8 text-center text-slate-600 dark:text-slate-400">Loading USA data...</div>;
     }
 
     return (
       <div className="space-y-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Metrics Comparison Chart</h3>
+        <h3 className="text-lg font-semibold text-slate-900 dark:text-white">Metrics Comparison Chart</h3>
         
         {/* Normalize all metrics to 0-100 scale for visual comparison */}
         {metrics.map((metric, idx) => {
@@ -264,18 +274,18 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
           const usaPercent = metric.usaValue ? (metric.usaValue / maxVal) * 100 : 0;
 
           return (
-            <div key={idx} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 bg-white dark:bg-gray-800">
-              <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">{metric.label}</h4>
+            <div key={idx} className="metric-card">
+              <h4 className="mb-3 font-medium text-slate-900 dark:text-white">{metric.label}</h4>
               
               {/* Region bar */}
               <div className="mb-3">
                 <div className="flex justify-between mb-1">
-                  <span className="text-sm text-gray-700 dark:text-gray-300">{selectedRegion}</span>
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{metric.format(metric.regionValue)}</span>
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{selectedRegion}</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">{metric.format(metric.regionValue)}</span>
                 </div>
-                <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-lg h-6 overflow-hidden">
+                <div className="h-6 w-full overflow-hidden rounded-md bg-slate-200 dark:bg-slate-800">
                   <div
-                    className="bg-gradient-to-r from-blue-400 to-blue-600 h-full flex items-center justify-end pr-2 transition-all duration-300"
+                    className="flex h-full items-center justify-end bg-slate-950 pr-2 transition-all duration-300 dark:bg-cyan-400"
                     style={{ width: `${regionPercent}%` }}
                   >
                     {regionPercent > 25 && (
@@ -289,12 +299,12 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
               {metric.usaValue !== undefined && usaPercent > 0 && (
                 <div>
                   <div className="flex justify-between mb-1">
-                    <span className="text-sm text-gray-700 dark:text-gray-300">USA Average</span>
-                    <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{metric.format(metric.usaValue)}</span>
+                    <span className="text-sm text-slate-700 dark:text-slate-300">USA Average</span>
+                    <span className="text-sm font-bold text-slate-900 dark:text-white">{metric.format(metric.usaValue)}</span>
                   </div>
-                  <div className="w-full bg-gray-200 dark:bg-gray-600 rounded-lg h-6 overflow-hidden">
+                  <div className="h-6 w-full overflow-hidden rounded-md bg-slate-200 dark:bg-slate-800">
                     <div
-                      className="bg-gradient-to-r from-indigo-400 to-indigo-600 h-full flex items-center justify-end pr-2 transition-all duration-300"
+                      className="flex h-full items-center justify-end bg-slate-500 pr-2 transition-all duration-300 dark:bg-slate-600"
                       style={{ width: `${usaPercent}%` }}
                     >
                       {usaPercent > 25 && (
@@ -314,13 +324,13 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
   return (
     <div className="space-y-4">
       {/* Chart Type Selector */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex flex-wrap gap-2">
         <button
           onClick={() => setChartType('metrics')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             chartType === 'metrics'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <BarChartIcon className="w-4 h-4" />
@@ -328,10 +338,10 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
         </button>
         <button
           onClick={() => setChartType('chart')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             chartType === 'chart'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <BarChartIcon className="w-4 h-4" />
@@ -339,10 +349,10 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
         </button>
         <button
           onClick={() => setChartType('vs-usa')}
-          className={`px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2 ${
+          className={`control-button flex items-center gap-2 ${
             chartType === 'vs-usa'
-              ? 'bg-indigo-600 dark:bg-indigo-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'control-button-active'
+              : 'control-button-idle'
           }`}
         >
           <TrendingUp className="w-4 h-4" />
@@ -351,7 +361,7 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
       </div>
 
       {/* Chart Content */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+      <div className="rounded-lg border border-slate-200 bg-white p-6 dark:border-slate-800 dark:bg-slate-900">
         {chartType === 'metrics' && renderMetricsView()}
         {chartType === 'chart' && renderChartView()}
         {chartType === 'vs-usa' && renderComparisonView()}

@@ -7,10 +7,11 @@ import requests
 import json
 import logging
 from typing import Dict, List, Optional
+from pathlib import Path
 from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
-load_dotenv(override=True)
+load_dotenv(Path(__file__).with_name(".env"), override=True)
 
 class CensusAPIClient:
     """Fetch Census Bureau data via American Community Survey (ACS)"""
@@ -28,7 +29,8 @@ class CensusAPIClient:
     def get_url(self, variables: str, geo: str, year: Optional[int] = None) -> str:
         """Build Census API URL"""
         target_year = str(year) if year is not None else self.YEAR
-        return f"{self.BASE_URL}/{target_year}/{self.DATASET}?get={variables}&for={geo}&key={self.api_key}"
+        key_param = f"&key={self.api_key}" if self.api_key else ""
+        return f"{self.BASE_URL}/{target_year}/{self.DATASET}?get={variables}&for={geo}{key_param}"
     
     def get_state_demographics(self, state_fips: str) -> Dict:
         """
@@ -50,6 +52,7 @@ class CensusAPIClient:
                 "B02001_003E",  # Black population
                 "B02001_005E",  # Asian population
                 "B03003_003E",  # Hispanic population
+                "B15003_001E",  # Population 25 years and over
                 "B15003_022E",  # Bachelor's degree
                 "B15003_023E",  # Master's degree
                 "B15003_024E",  # Professional degree
@@ -62,10 +65,6 @@ class CensusAPIClient:
             geo_filter = f"state:{state_fips}"
             url = self.get_url(variables, geo_filter)
             
-            if not self.api_key:
-                logger.warning(f"Skipping Census API call (no key). Using default data.")
-                return self._get_default_state_data(state_fips)
-            
             response = requests.get(url, timeout=10)
             response.raise_for_status()
             
@@ -76,8 +75,172 @@ class CensusAPIClient:
             return {}
         
         except Exception as e:
-            logger.error(f"Error fetching Census data: {e}")
+            logger.error(f"Error fetching Census data for state FIPS {state_fips}: {type(e).__name__}")
             return {}
+
+    def get_state_opportunity_metrics(self, state_fips: str, year: Optional[int] = None) -> Dict:
+        """
+        Fetch a broader state opportunity snapshot from ACS detail tables.
+
+        Adds labor market depth and inequality-adjacent pressure indicators:
+        labor force counts, employed/unemployed counts, participation rate,
+        employment-population ratio, per-capita income, rent burden, housing
+        tenure, SNAP usage, and public assistance usage.
+        """
+        variables = ",".join([
+            "B23025_001E",  # Population 16 years and over
+            "B23025_002E",  # In labor force
+            "B23025_003E",  # Civilian labor force
+            "B23025_004E",  # Employed
+            "B23025_005E",  # Unemployed
+            "B23025_007E",  # Not in labor force
+            "B19301_001E",  # Per-capita income
+            "B25064_001E",  # Median gross rent
+            "B25077_001E",  # Median home value
+            "B25003_001E",  # Occupied housing units
+            "B25003_002E",  # Owner-occupied housing units
+            "B25003_003E",  # Renter-occupied housing units
+            "B25070_001E",  # Renter households with rent burden denominator
+            "B25070_007E",  # Gross rent 30.0 to 34.9 percent of income
+            "B25070_008E",  # Gross rent 35.0 to 39.9 percent of income
+            "B25070_009E",  # Gross rent 40.0 to 49.9 percent of income
+            "B25070_010E",  # Gross rent 50.0 percent or more of income
+            "B22010_001E",  # Total households for SNAP table
+            "B22010_002E",  # Households receiving SNAP
+            "B19057_001E",  # Total households for public assistance table
+            "B19057_002E",  # Households with public assistance income
+        ])
+
+        try:
+            target_year = year or int(self.YEAR)
+            url = self.get_url(variables, f"state:{state_fips}", year=target_year)
+            response = requests.get(url, timeout=12)
+            response.raise_for_status()
+            rows = response.json()
+            if len(rows) < 2:
+                return {}
+
+            header, row = rows[0], rows[1]
+            record = dict(zip(header, row))
+            parsed = self._parse_opportunity_record(record)
+            parsed["source"] = "Census Bureau ACS"
+            parsed["year"] = target_year
+            return parsed
+        except Exception as e:
+            logger.warning(f"ACS opportunity metrics unavailable for FIPS {state_fips}: {type(e).__name__}")
+            return {}
+
+    def get_all_state_labor_metrics(self, year: Optional[int] = None) -> Dict[str, Dict]:
+        """Fetch all-state ACS labor force metrics in one request."""
+        variables = ",".join([
+            "NAME",
+            "B23025_001E",
+            "B23025_002E",
+            "B23025_003E",
+            "B23025_004E",
+            "B23025_005E",
+            "B23025_007E",
+        ])
+
+        try:
+            target_year = year or int(self.YEAR)
+            url = self.get_url(variables, "state:*", year=target_year)
+            response = requests.get(url, timeout=15)
+            response.raise_for_status()
+            rows = response.json()
+            if len(rows) < 2:
+                return {}
+
+            header = rows[0]
+            result: Dict[str, Dict] = {}
+            for row in rows[1:]:
+                record = dict(zip(header, row))
+                state_name = record.get("NAME")
+                if state_name:
+                    result[state_name] = self._parse_labor_record(record)
+            return result
+        except Exception as e:
+            logger.warning(f"ACS all-state labor metrics unavailable for {year or self.YEAR}: {type(e).__name__}")
+            return {}
+
+    def _safe_int(self, value) -> int:
+        try:
+            parsed = int(value)
+            return parsed if parsed >= 0 else 0
+        except (TypeError, ValueError):
+            return 0
+
+    def _safe_float(self, value):
+        try:
+            parsed = float(value)
+            return parsed if parsed >= 0 else None
+        except (TypeError, ValueError):
+            return None
+
+    def _pct(self, numerator: int, denominator: int):
+        return round((numerator / denominator) * 100, 2) if denominator > 0 else None
+
+    def _parse_labor_record(self, record: Dict) -> Dict:
+        population_16_plus = self._safe_int(record.get("B23025_001E"))
+        labor_force = self._safe_int(record.get("B23025_002E"))
+        civilian_labor_force = self._safe_int(record.get("B23025_003E"))
+        employed = self._safe_int(record.get("B23025_004E"))
+        unemployed = self._safe_int(record.get("B23025_005E"))
+        not_in_labor_force = self._safe_int(record.get("B23025_007E"))
+
+        return {
+            "population_16_plus": population_16_plus,
+            "labor_force": labor_force,
+            "civilian_labor_force": civilian_labor_force,
+            "employed": employed,
+            "unemployed": unemployed,
+            "not_in_labor_force": not_in_labor_force,
+            "labor_force_participation_rate": self._pct(labor_force, population_16_plus),
+            "employment_population_ratio": self._pct(employed, population_16_plus),
+            "acs_unemployment_rate": self._pct(unemployed, civilian_labor_force),
+            "not_in_labor_force_rate": self._pct(not_in_labor_force, population_16_plus),
+        }
+
+    def _parse_opportunity_record(self, record: Dict) -> Dict:
+        labor = self._parse_labor_record(record)
+        renter_denominator = self._safe_int(record.get("B25070_001E"))
+        rent_burdened = (
+            self._safe_int(record.get("B25070_007E"))
+            + self._safe_int(record.get("B25070_008E"))
+            + self._safe_int(record.get("B25070_009E"))
+            + self._safe_int(record.get("B25070_010E"))
+        )
+        occupied_housing_units = self._safe_int(record.get("B25003_001E"))
+        owner_units = self._safe_int(record.get("B25003_002E"))
+        renter_units = self._safe_int(record.get("B25003_003E"))
+        snap_households_total = self._safe_int(record.get("B22010_001E"))
+        snap_households = self._safe_int(record.get("B22010_002E"))
+        public_assistance_total = self._safe_int(record.get("B19057_001E"))
+        public_assistance_households = self._safe_int(record.get("B19057_002E"))
+
+        return {
+            "labor": labor,
+            "income": {
+                "per_capita_income": self._safe_int(record.get("B19301_001E")),
+            },
+            "housing": {
+                "median_gross_rent": self._safe_int(record.get("B25064_001E")),
+                "median_home_value": self._safe_int(record.get("B25077_001E")),
+                "occupied_housing_units": occupied_housing_units,
+                "owner_occupied_units": owner_units,
+                "renter_occupied_units": renter_units,
+                "homeownership_rate": self._pct(owner_units, occupied_housing_units),
+                "renter_household_rate": self._pct(renter_units, occupied_housing_units),
+                "rent_burdened_households": rent_burdened,
+                "rent_burdened_rate": self._pct(rent_burdened, renter_denominator),
+            },
+            "safety_net": {
+                "snap_households": snap_households,
+                "snap_household_rate": self._pct(snap_households, snap_households_total),
+                "public_assistance_households": public_assistance_households,
+                "public_assistance_rate": self._pct(public_assistance_households, public_assistance_total),
+            },
+        }
     
     def _parse_census_response(self, data: List) -> Dict:
         """Parse Census API response into structured format"""
@@ -96,7 +259,8 @@ class CensusAPIClient:
                 int(values[idx.get('B15003_024E', 0)] or 0) +
                 int(values[idx.get('B15003_025E', 0)] or 0)
             )
-            education_pct = (bachelors_up / population * 100) if population > 0 else 0
+            education_denominator = int(values[idx.get('B15003_001E', 0)] or 0)
+            education_pct = (bachelors_up / education_denominator * 100) if education_denominator > 0 else 0
             
             # Calculate poverty rate
             in_poverty = int(values[idx.get('B17001_002E', 0)] or 0)
@@ -173,7 +337,7 @@ class CensusAPIClient:
                     continue
             return result
         except Exception as e:
-            logger.warning(f"ACS all-state Gini unavailable for {target_year}: {e}")
+            logger.warning(f"ACS all-state Gini unavailable for {target_year}: {type(e).__name__}")
             return {}
     
     def get_state_income_distribution(self, state_fips: str, year: Optional[int] = None) -> Dict:
@@ -315,7 +479,7 @@ class CensusAPIClient:
             }
 
         except Exception as e:
-            logger.error(f"Error fetching income distribution for FIPS {state_fips}: {e}")
+            logger.error(f"Error fetching income distribution for FIPS {state_fips}: {type(e).__name__}")
             return {}
 
     def get_county_demographics(self, state_fips: str, county_fips: str) -> Dict:
@@ -338,7 +502,7 @@ class CensusAPIClient:
             return {}
         
         except Exception as e:
-            logger.error(f"Error fetching county data: {e}")
+            logger.error(f"Error fetching county data for FIPS {state_fips}/{county_fips}: {type(e).__name__}")
             return {}
 
 

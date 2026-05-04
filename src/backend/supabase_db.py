@@ -9,11 +9,12 @@ from datetime import datetime
 import logging
 from functools import wraps
 import asyncio
+from pathlib import Path
 
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
-load_dotenv(override=True)
+load_dotenv(Path(__file__).with_name(".env"), override=True)
 
 logger = logging.getLogger(__name__)
 
@@ -365,6 +366,91 @@ class SupabaseDB:
         except Exception as e:
             logger.error(f"Error inserting economic indicators: {e}")
             return False
+
+    def create_source_run(self, source_name: str, metadata: Optional[Dict[str, Any]] = None) -> Optional[str]:
+        """Create a source run audit row and return its id."""
+        if not self.client:
+            return None
+
+        try:
+            result = self.client.table("source_runs").insert({
+                "source_name": source_name,
+                "status": "running",
+                "started_at": datetime.now().isoformat(),
+                "metadata": metadata or {},
+            }).execute()
+            if result.data:
+                return result.data[0].get("id")
+        except Exception as e:
+            logger.error(f"Error creating source run: {e}")
+        return None
+
+    def finish_source_run(
+        self,
+        run_id: Optional[str],
+        status: str,
+        records_written: int = 0,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Mark a source run as complete/failed."""
+        if not self.client or not run_id:
+            return
+
+        try:
+            self.client.table("source_runs").update({
+                "status": status,
+                "finished_at": datetime.now().isoformat(),
+                "records_written": records_written,
+                "error_message": error_message,
+            }).eq("id", run_id).execute()
+        except Exception as e:
+            logger.error(f"Error finishing source run: {e}")
+
+    def upsert_state_metrics(self, rows: List[Dict[str, Any]]) -> bool:
+        """Upsert normalized state metric snapshots."""
+        if not self.client or not rows:
+            return False
+
+        try:
+            self.client.table("state_metric_snapshots").upsert(
+                rows,
+                on_conflict="state_fips,metric_key,period,source",
+            ).execute()
+            logger.info(f"Upserted {len(rows)} state metric snapshots")
+            return True
+        except Exception as e:
+            logger.error(f"Error upserting state metric snapshots: {e}")
+            return False
+
+    def insert_data_quality_issues(self, rows: List[Dict[str, Any]]) -> bool:
+        """Insert data quality issues for missing or partial upstream data."""
+        if not self.client or not rows:
+            return False
+
+        try:
+            self.client.table("data_quality_issues").insert(rows).execute()
+            logger.info(f"Inserted {len(rows)} data quality issues")
+            return True
+        except Exception as e:
+            logger.error(f"Error inserting data quality issues: {e}")
+            return False
+
+    def get_latest_state_metrics(self, state_name: Optional[str] = None, state_fips: Optional[str] = None) -> List[Dict]:
+        """Read the latest normalized state metrics view."""
+        if not self.client:
+            return []
+
+        try:
+            query = self.client.table("latest_state_metric_snapshots").select("*")
+            if state_fips:
+                query = query.eq("state_fips", state_fips)
+            elif state_name:
+                query = query.ilike("state_name", state_name)
+            result = query.order("metric_key").execute()
+            return result.data
+        except Exception as e:
+            logger.error(f"Error fetching latest state metrics: {e}")
+            return []
     
     # ============ UTILITY METHODS ============
     
