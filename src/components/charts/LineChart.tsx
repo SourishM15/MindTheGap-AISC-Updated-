@@ -32,7 +32,6 @@ const LineChart: React.FC<LineChartProps> = ({
     // Find the min and max values for x and y axes
     const minYear = Math.min(...data.map(d => d.year));
     const maxYear = Math.max(...data.map(d => d.year));
-    const maxValue = Math.max(...data.map(d => d.value));
 
     // Set up scales
     const xScale = (x: number) => {

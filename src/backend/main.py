@@ -3,14 +3,18 @@ import re
 import logging
 import json
 import secrets
+import time
+from collections import defaultdict, deque
 from datetime import datetime
 from functools import lru_cache
-from fastapi import FastAPI, HTTPException, Header, Depends, Query
-from typing import Optional, Annotated
-from pydantic import BaseModel
+from fastapi import FastAPI, HTTPException, Header, Depends, Query, Request
+from typing import Any, Optional, Annotated
+from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 import pandas as pd
 import networkx as nx
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
@@ -33,11 +37,15 @@ from city_api_client import city_client
 from saipe_api_client import saipe_client, STATE_FIPS as SAIPE_STATE_FIPS
 from census_api_client import CensusAPIClient
 from bea_api_client import BEAAPIClient
+from data_enrichment_pipeline import STATES
+from state_profile_builder import build_api_enriched_metro_profile, build_api_enriched_state_profile
 
 census_client = CensusAPIClient()
 bea_client = BEAAPIClient()
 _STATE_BENCHMARK_CACHE: dict = {"payload": None, "created_at": None}
 _STATE_BENCHMARK_TTL_SECONDS = 60 * 60
+_LIVE_STATE_PROFILE_CACHE: dict[str, dict] = {}
+_SUPABASE_STORAGE_BUCKET = "mindthegap-gov-data"
 
 # Configure logging
 logging.basicConfig(
@@ -55,17 +63,72 @@ GROQ_MODEL = "llama-3.3-70b-versatile"
 if not groq_api_key:
     logger.warning("GROQ_API_KEY not found in .env file. Please add it.")
 
+def _env_csv(name: str, default: str) -> list[str]:
+    raw = os.getenv(name, default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+APP_ENV = os.getenv("APP_ENV", "development").lower()
+ENABLE_API_DOCS = os.getenv("ENABLE_API_DOCS", "true" if APP_ENV != "production" else "false").lower() == "true"
+
 # Initialize FastAPI app
-app = FastAPI(title="MindTheGap API", version="2.0", docs_url="/docs")
+app = FastAPI(
+    title="MindTheGap API",
+    version="2.0",
+    docs_url="/docs" if ENABLE_API_DOCS else None,
+    redoc_url="/redoc" if ENABLE_API_DOCS else None,
+    openapi_url="/openapi.json" if ENABLE_API_DOCS else None,
+)
+
+allowed_hosts = _env_csv("ALLOWED_HOSTS", "localhost,127.0.0.1,testserver")
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=allowed_hosts)
 
 # Add CORS middleware to allow frontend requests
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:5174", "http://localhost:3000", "http://localhost:3001"],
+    allow_origins=_env_csv(
+        "CORS_ALLOW_ORIGINS",
+        "http://localhost:5173,http://localhost:5174,http://localhost:3000,http://localhost:3001",
+    ),
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "OPTIONS"],
+    allow_headers=["Content-Type", "X-Admin-Key"],
 )
+
+_RATE_LIMIT_WINDOW_SECONDS = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+_RATE_LIMIT_MAX_REQUESTS = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "60"))
+_RATE_LIMITED_PREFIXES = ("/api/chat", "/api/admin", "/api/policy-database")
+_RATE_LIMIT_BUCKETS: dict[str, deque[float]] = defaultdict(deque)
+
+
+def _client_ip(request: Request) -> str:
+    forwarded_for = request.headers.get("x-forwarded-for", "")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    if request.url.path.startswith(_RATE_LIMITED_PREFIXES):
+        now = time.monotonic()
+        bucket_key = f"{_client_ip(request)}:{request.url.path}"
+        hits = _RATE_LIMIT_BUCKETS[bucket_key]
+        while hits and now - hits[0] > _RATE_LIMIT_WINDOW_SECONDS:
+            hits.popleft()
+        if len(hits) >= _RATE_LIMIT_MAX_REQUESTS:
+            return JSONResponse({"detail": "Rate limit exceeded"}, status_code=429)
+        hits.append(now)
+
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    response.headers.setdefault("Cache-Control", "no-store" if request.url.path.startswith("/api/admin") else "private, max-age=60")
+    if request.url.scheme == "https":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 # ---------------------------------------------------------------------------
 # Security helpers
@@ -148,6 +211,14 @@ def load_enriched_state_profile(state_name: str) -> Optional[dict]:
     except Exception as e:
         logger.info(f"No prebuilt enriched state profile for {state_name}; live Census/SAIPE fallback will be used")
         return None
+
+def get_cached_live_state_profile(state_name: str) -> Optional[dict]:
+    """Return an in-process live fallback profile, if one was built earlier."""
+    return _LIVE_STATE_PROFILE_CACHE.get(_safe_slug(state_name))
+
+def cache_live_state_profile(state_name: str, profile: dict) -> None:
+    """Cache live Census/SAIPE/BEA fallback profiles to avoid repeat API calls."""
+    _LIVE_STATE_PROFILE_CACHE[_safe_slug(state_name)] = profile
 
 def load_enriched_metro_profile(metro_name: str) -> Optional[dict]:
     """Load enriched profile for a specific metro area from Supabase Storage"""
@@ -395,28 +466,137 @@ def health_check():
         "llm_available": llm_chain is not None
     }
 
+def _storage_folder_names(prefix: str) -> list[str]:
+    """Return folder/object names under a Supabase Storage prefix."""
+    from supabase_db import supabase_client
+    if not supabase_client:
+        raise RuntimeError("Supabase client unavailable")
+    files = supabase_client.storage.from_(_SUPABASE_STORAGE_BUCKET).list(prefix) or []
+    return sorted(f["name"] for f in files if f.get("name"))
+
+
+def _storage_json(key: str) -> dict[str, Any]:
+    from supabase_db import supabase_client
+    if not supabase_client:
+        return {}
+    raw = supabase_client.storage.from_(_SUPABASE_STORAGE_BUCKET).download(key)
+    return json.loads(raw)
+
+
+def _profile_freshness(profile: dict[str, Any]) -> dict[str, Any]:
+    identity = profile.get("identity") or {}
+    data_quality = profile.get("data_quality") or {}
+    demographics = profile.get("demographics") or {}
+    return {
+        "generated_at": identity.get("timestamp") or data_quality.get("last_updated") or demographics.get("timestamp"),
+        "demographics_year": demographics.get("year"),
+        "source": profile.get("source"),
+        "sources": data_quality.get("sources", []),
+    }
+
+
+@app.get("/api/data-health")
+async def data_health():
+    """Summarize Supabase Storage coverage for prebuilt data assets."""
+    expected_state_slugs = sorted(_safe_slug(name) for name in STATES.values())
+    expected_metro_slugs = sorted(_safe_slug(name) for name in city_client.metro_areas.keys())
+
+    result: dict[str, Any] = {
+        "success": False,
+        "status": "unavailable",
+        "bucket": _SUPABASE_STORAGE_BUCKET,
+        "generated_at": datetime.now().isoformat(),
+        "coverage": {},
+        "samples": {},
+        "errors": [],
+    }
+
+    try:
+        from supabase_db import supabase_client
+        if not supabase_client:
+            result["errors"].append("Supabase client is not configured")
+            return result
+
+        state_slugs = _storage_folder_names("enriched-regional-data/state-profiles")
+        metro_slugs = _storage_folder_names("enriched-regional-data/metro-areas")
+        census_objects = _storage_folder_names("government-data/census")
+        dfa_objects = sorted(name for name in census_objects if name.startswith("dfa-") and name.endswith(".csv"))
+
+        missing_states = sorted(set(expected_state_slugs) - set(state_slugs))
+        missing_metros = sorted(set(expected_metro_slugs) - set(metro_slugs))
+
+        result["coverage"] = {
+            "states": {
+                "present": len(state_slugs),
+                "expected": len(expected_state_slugs),
+                "missing": missing_states,
+                "complete": not missing_states,
+            },
+            "metros": {
+                "present": len(metro_slugs),
+                "expected": len(expected_metro_slugs),
+                "missing": missing_metros,
+                "complete": not missing_metros,
+            },
+            "dfa_csvs": {
+                "present": len(dfa_objects),
+                "files": dfa_objects,
+                "complete": len(dfa_objects) > 0,
+            },
+        }
+
+        sample_state_slugs = [slug for slug in ["california", "minnesota", "new-york", "texas", "florida"] if slug in state_slugs]
+        result["samples"]["states"] = {}
+        for slug in sample_state_slugs:
+            try:
+                profile = _storage_json(f"enriched-regional-data/state-profiles/{slug}/profile.json")
+                result["samples"]["states"][slug] = _profile_freshness(profile)
+            except Exception as exc:
+                result["samples"]["states"][slug] = {"error": str(exc)}
+
+        sample_metro_slugs = [slug for slug in ["new-york", "los-angeles", "chicago", "seattle", "minneapolis"] if slug in metro_slugs]
+        result["samples"]["metros"] = {}
+        for slug in sample_metro_slugs:
+            try:
+                profile = _storage_json(f"enriched-regional-data/metro-areas/{slug}/profile.json")
+                result["samples"]["metros"][slug] = _profile_freshness(profile)
+            except Exception as exc:
+                result["samples"]["metros"][slug] = {"error": str(exc)}
+
+        result["success"] = True
+        result["status"] = "healthy" if (
+            result["coverage"]["states"]["complete"]
+            and result["coverage"]["metros"]["complete"]
+            and result["coverage"]["dfa_csvs"]["complete"]
+        ) else "partial"
+        return result
+    except Exception as exc:
+        logger.error(f"Data health check failed: {exc}")
+        result["errors"].append(str(exc))
+        return result
+
 
 # --- Request/Response Models ---
 class Message(BaseModel):
-    role: str  # 'user' or 'assistant'
-    content: str
+    role: str = Field(pattern="^(user|assistant)$")
+    content: str = Field(min_length=1, max_length=4000)
 
 class ChatRequest(BaseModel):
-    message: str
-    conversation_id: str = "default"  # Track conversation for context continuity
-    conversation_history: list[Message] = []  # Optional conversation context
+    message: str = Field(min_length=1, max_length=2000)
+    conversation_id: str = Field(default="default", min_length=1, max_length=120, pattern=r"^[a-zA-Z0-9_.:-]+$")
+    conversation_history: list[Message] = Field(default_factory=list, max_length=20)
     
 class TrendRequest(BaseModel):
-    category: str  # e.g., "networth", "income"
-    demographic: str = None
+    category: str = Field(min_length=1, max_length=40)  # e.g., "networth", "income"
+    demographic: Optional[str] = Field(default=None, max_length=80)
     
 class PolicyRequest(BaseModel):
-    gini_coefficient: float = 0.45
-    top_1_percent_share: float = 35
-    bottom_50_percent_share: float = 3
-    unemployment_rate: float = 4.5
-    poverty_rate: float = 12
-    region: str = "National"
+    gini_coefficient: float = Field(default=0.45, ge=0, le=1)
+    top_1_percent_share: float = Field(default=35, ge=0, le=100)
+    bottom_50_percent_share: float = Field(default=3, ge=0, le=100)
+    unemployment_rate: float = Field(default=4.5, ge=0, le=100)
+    poverty_rate: float = Field(default=12, ge=0, le=100)
+    region: str = Field(default="National", min_length=1, max_length=120)
 
 
 # --- Chat Endpoint (Enhanced) ---
@@ -1961,68 +2141,29 @@ async def get_enriched_state(state_name: str):
         profile = load_enriched_state_profile(state_name)
 
         if not profile:
-            # Pre-built Supabase profile not available — build a live profile from
-            # the free Census ACS + SAIPE APIs instead of returning an error.
-            logger.info(f"No Supabase profile for {state_name}; building live profile from Census/SAIPE APIs")
-            slug = _safe_slug(state_name)
-            fips = SAIPE_STATE_FIPS.get(slug)
-            census_data = {}
-            opportunity_data = {}
-            bea_data = {}
-            if fips and fips != "00":
-                try:
-                    census_data = census_client.get_state_demographics(fips)
-                except Exception as ce:
-                    logger.warning(f"Census API failed for {state_name}: {ce}")
-                try:
-                    opportunity_data = census_client.get_state_opportunity_metrics(fips)
-                except Exception as oe:
-                    logger.warning(f"ACS opportunity data failed for {state_name}: {type(oe).__name__}")
-                try:
-                    bea_data = bea_client.get_state_regional_profile(fips)
-                except Exception as bea_err:
-                    logger.warning(f"BEA data failed for {state_name}: {type(bea_err).__name__}")
-            saipe_live = {}
-            try:
-                saipe_live = saipe_client.get_state_snapshot(state_name, year=2023)
-            except Exception as se:
-                logger.warning(f"SAIPE API failed for {state_name}: {se}")
+            cached_live_profile = get_cached_live_state_profile(state_name)
+            if cached_live_profile:
+                logger.info(f"Using cached live enriched profile for {state_name}")
+                return {
+                    "success": True,
+                    "state": state_name,
+                    "profile": cached_live_profile,
+                    "data_sources": ["Census Bureau", "Census SAIPE", "Bureau of Labor Statistics", "Federal Reserve (FRED)", "Bureau of Economic Analysis"]
+                }
 
-            if not census_data and not saipe_live:
+            # Pre-built Supabase profile not available — build a live profile from
+            # free government APIs instead of returning an error.
+            logger.info(f"No Supabase profile for {state_name}; building live profile from government APIs")
+            profile = build_api_enriched_state_profile(
+                state_name,
+                census_client=census_client,
+                bea_client=bea_client,
+            )
+
+            if not profile:
                 return {"success": False, "error": f"No data available for {state_name}"}
 
-            profile = {
-                "identity": {
-                    "state_name": state_name,
-                    "fips_code": fips or "",
-                },
-                "demographics": {
-                    "population": census_data.get("population", 0),
-                    "median_age": census_data.get("median_age", 0),
-                    "median_household_income": (
-                        saipe_live.get("median_household_income")
-                        or census_data.get("median_household_income", 0)
-                    ),
-                    "poverty_rate": (
-                        saipe_live.get("poverty_rate")
-                        or census_data.get("poverty_rate", 0)
-                    ),
-                    "child_poverty_rate": saipe_live.get("child_poverty_rate"),
-                    "education_bachelor_and_above": census_data.get("education_bachelor_and_above", 0),
-                    "race_distribution": census_data.get("race_distribution", {}),
-                    "source": "Census ACS 2022 + SAIPE 2023",
-                    "year": 2023,
-                },
-                "saipe": saipe_live,
-                "opportunity": opportunity_data,
-                "bea": bea_data,
-                "employment": {
-                    "acs_labor": opportunity_data.get("labor", {}),
-                    "source": opportunity_data.get("source", "Census Bureau ACS") if opportunity_data else "unavailable",
-                    "year": opportunity_data.get("year"),
-                },
-                "source": "live_api",
-            }
+            cache_live_state_profile(state_name, profile)
         else:
             # Enrich cached Supabase profile with fresh SAIPE figures
             try:
@@ -2261,20 +2402,10 @@ async def get_enriched_metro(metro_name: str):
 
         # If no S3 profile, build one from live APIs
         if not profile:
-            demographics = city_client.get_metro_area_demographics(metro_name)
-            unemployment = city_client.get_metro_unemployment(metro_name)
+            profile = build_api_enriched_metro_profile(metro_name, city_client=city_client)
 
-            if not demographics and not unemployment:
+            if not profile:
                 return {"success": False, "error": "No data found for requested metro area"}
-
-            profile = {
-                "identity": {
-                    "metro_name": metro_name,
-                    "region_type": "metro",
-                },
-                "demographics": demographics or {},
-                "employment": unemployment or {},
-            }
         else:
             # Enrich S3 profile with latest live data
             demographics = city_client.get_metro_area_demographics(metro_name)

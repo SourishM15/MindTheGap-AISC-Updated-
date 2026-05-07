@@ -12,6 +12,7 @@ import MetricTooltip from '../components/MetricTooltip';
 import SourceBadge from '../components/SourceBadge';
 import { ArrowLeft, GitCompare, LayoutDashboard, MapPinned, Sparkles, TrendingUp } from 'lucide-react';
 import { useStateBenchmarks } from '../hooks/useStateBenchmarks';
+import { apiFetch } from '../utils/api';
 
 const HomePage: React.FC = () => {
   const navigate = useNavigate();
@@ -53,7 +54,7 @@ const HomePage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`http://localhost:8000/api/enriched-state/${stateName}`);
+      const response = await apiFetch(`/api/enriched-state/${encodeURIComponent(stateName)}`);
       if (!response.ok) {
         throw new Error(`Failed to load data for ${stateName}`);
       }

@@ -111,7 +111,8 @@ class SupabaseDB:
         self,
         demographic_type: str,  # "race", "age", "education", "generation"
         group: Optional[str] = None,
-        location: Optional[str] = None
+        location: Optional[str] = None,
+        limit: int = 100
     ) -> List[Dict]:
         """
         Fetch demographic data with wealth breakdown
@@ -136,7 +137,7 @@ class SupabaseDB:
             if location:
                 query = query.eq("location", location)
             
-            result = query.order("date", desc=True).execute()
+            result = query.order("date", desc=True).limit(limit).execute()
             return result.data
         
         except Exception as e:

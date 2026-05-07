@@ -30,7 +30,7 @@ MindThe_Gap is an interactive platform that combines wealth inequality metrics w
 - **Pandas & NumPy** for data processing
 - **FAISS** for vector similarity search
 - **SQLAlchemy** for data management
-- **AWS S3** for data storage and caching
+- **Supabase Storage/Database** for prebuilt government datasets and enriched regional profiles
 
 ## Project Structure
 
@@ -89,8 +89,24 @@ OPENAI_API_KEY=your_key_here
 CENSUS_API_KEY=your_key_here
 BLS_API_KEY=your_key_here
 FRED_API_KEY=your_key_here
-AWS_REGION=us-east-2
+BEA_API_KEY=your_key_here
+SUPABASE_URL=your_project_url
+SUPABASE_KEY=your_supabase_key
 ```
+
+For production, also set the security controls:
+
+```
+APP_ENV=production
+ENABLE_API_DOCS=false
+CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
+ALLOWED_HOSTS=your-api-domain.com
+ADMIN_API_KEY=use-a-long-random-secret
+RATE_LIMIT_WINDOW_SECONDS=60
+RATE_LIMIT_MAX_REQUESTS=60
+```
+
+The frontend API base URL is configured separately with `VITE_API_BASE_URL`; see `.env.example`.
 
 Refer to the government agencies' websites to obtain API keys:
 - [Census Bureau](https://api.census.gov/)
@@ -110,6 +126,47 @@ Refer to the government agencies' websites to obtain API keys:
 **Backend:**
 - `python main.py` - Start FastAPI server
 - `python run_enrichment_pipeline.py` - Run data enrichment jobs
+
+### Supabase Data Seeding
+
+The backend expects prebuilt objects in Supabase Storage so state pages do not need to rebuild enriched data on every request. From `src/backend`, run:
+
+```bash
+python seed_supabase_storage.py --dfa --verify
+python seed_supabase_storage.py --states California Minnesota --verify
+```
+
+Use `--all-states` when you are ready to prebuild every state profile:
+
+```bash
+python seed_supabase_storage.py --all-states
+```
+
+Seed the curated major metro/city profiles with:
+
+```bash
+python seed_supabase_storage.py --all-metros
+```
+
+Or seed selected metros:
+
+```bash
+python seed_supabase_storage.py --metros "New York" "Los Angeles" Seattle
+```
+
+The state profile seed path builds from the live government API clients first, including Census ACS, Census SAIPE, BLS, FRED, and BEA where API keys are configured, then uploads JSON to `mindthegap-gov-data/enriched-regional-data/state-profiles/{state}/`. Metro profiles use Census ACS metro data, BLS LAUS, ACS income distribution, and the metro's home-state SAIPE snapshot, then upload to `mindthegap-gov-data/enriched-regional-data/metro-areas/{metro}/`.
+
+After seeding, check Storage coverage and sample freshness with:
+
+```bash
+curl http://localhost:8000/api/data-health
+```
+
+To also sync normalized metrics into Supabase database tables:
+
+```bash
+python sync_government_data.py --states California Minnesota
+```
 
 ## Data Sources
 

@@ -43,18 +43,21 @@ class S3DataLoader:
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
-    def _download(self, key: str) -> bytes | None:
+    def _download(self, key: str, *, quiet_missing: bool = False) -> bytes | None:
         """Download a file from Supabase Storage; returns raw bytes or None."""
         if not self._supabase:
             return None
         try:
             return self._supabase.storage.from_(self.bucket).download(key)
         except Exception as e:
-            logger.warning(f"Supabase Storage download failed for '{key}': {e}")
+            if quiet_missing and ("not_found" in str(e) or "Object not found" in str(e) or "404" in str(e)):
+                logger.debug(f"Supabase Storage object not found for '{key}'; using fallback if available")
+            else:
+                logger.warning(f"Supabase Storage download failed for '{key}': {e}")
             return None
 
-    def _read_csv(self, key: str) -> pd.DataFrame:
-        raw = self._download(key)
+    def _read_csv(self, key: str, *, quiet_missing: bool = False) -> pd.DataFrame:
+        raw = self._download(key, quiet_missing=quiet_missing)
         if raw:
             return pd.read_csv(StringIO(raw.decode("utf-8")))
         return pd.DataFrame()
@@ -132,7 +135,7 @@ class S3DataLoader:
         if self._is_cached(cache_key):
             return self.cache[cache_key]
 
-        df = self._read_csv(f"government-data/census/{filename}")
+        df = self._read_csv(f"government-data/census/{filename}", quiet_missing=True)
         if df.empty:
             local_path = os.path.join(os.path.dirname(__file__), '..', 'data', filename)
             try:
@@ -271,4 +274,3 @@ class S3DataLoader:
 
 # Global instance
 s3_loader = S3DataLoader()
-

@@ -282,22 +282,54 @@ const Map: React.FC<MapProps> = ({ view, onStateClick, selectedState = 'United S
           const [lowLabel, highLabel] = cfg.invert
             ? ['Higher', 'Lower']
             : ['Lower',  'Higher'];
-          div.innerHTML = `
-            <div style="font-weight:700;font-size:12px;margin-bottom:8px;color:#f1f5f9;letter-spacing:0.04em">${cfg.label.toUpperCase()}</div>
-            <svg width="125" height="12" style="display:block;border-radius:4px;margin-bottom:4px">
-              <defs><linearGradient id="mtg-grad" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%"   stop-color="#14b8a6"/>
-                <stop offset="50%"  stop-color="#f59e0b"/>
-                <stop offset="100%" stop-color="#ef4444"/>
-              </linearGradient></defs>
-              <rect width="125" height="12" fill="url(#mtg-grad)" rx="3"/>
-            </svg>
-            <div style="display:flex;justify-content:space-between;color:#94a3b8;font-size:10px">
-              <span>${lowLabel}</span><span>${highLabel}</span>
-            </div>
-            <div style="margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;color:#94a3b8;font-size:10px">
-              Selected: <span style="color:#38bdf8;font-weight:600">sky blue</span>
-            </div>`;
+          const title = L.DomUtil.create('div', '', div);
+          title.style.cssText = 'font-weight:700;font-size:12px;margin-bottom:8px;color:#f1f5f9;letter-spacing:0.04em';
+          title.textContent = cfg.label.toUpperCase();
+
+          const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+          svg.setAttribute('width', '125');
+          svg.setAttribute('height', '12');
+          svg.style.cssText = 'display:block;border-radius:4px;margin-bottom:4px';
+          const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+          const gradient = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient');
+          gradient.setAttribute('id', 'mtg-grad');
+          gradient.setAttribute('x1', '0%');
+          gradient.setAttribute('y1', '0%');
+          gradient.setAttribute('x2', '100%');
+          gradient.setAttribute('y2', '0%');
+          [
+            ['0%', '#14b8a6'],
+            ['50%', '#f59e0b'],
+            ['100%', '#ef4444'],
+          ].forEach(([offset, color]) => {
+            const stop = document.createElementNS('http://www.w3.org/2000/svg', 'stop');
+            stop.setAttribute('offset', offset);
+            stop.setAttribute('stop-color', color);
+            gradient.appendChild(stop);
+          });
+          defs.appendChild(gradient);
+          svg.appendChild(defs);
+          const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+          rect.setAttribute('width', '125');
+          rect.setAttribute('height', '12');
+          rect.setAttribute('fill', 'url(#mtg-grad)');
+          rect.setAttribute('rx', '3');
+          svg.appendChild(rect);
+          div.appendChild(svg);
+
+          const labels = L.DomUtil.create('div', '', div);
+          labels.style.cssText = 'display:flex;justify-content:space-between;color:#94a3b8;font-size:10px';
+          const low = L.DomUtil.create('span', '', labels);
+          low.textContent = lowLabel;
+          const high = L.DomUtil.create('span', '', labels);
+          high.textContent = highLabel;
+
+          const selected = L.DomUtil.create('div', '', div);
+          selected.style.cssText = 'margin-top:8px;border-top:1px solid rgba(255,255,255,0.08);padding-top:6px;color:#94a3b8;font-size:10px';
+          selected.append('Selected: ');
+          const selectedColor = L.DomUtil.create('span', '', selected);
+          selectedColor.style.cssText = 'color:#38bdf8;font-weight:600';
+          selectedColor.textContent = 'sky blue';
           return div;
         },
       });

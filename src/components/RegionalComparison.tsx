@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart as BarChartIcon, TrendingUp } from 'lucide-react';
+import { apiFetch } from '../utils/api';
 
 interface RegionalComparisonProps {
   selectedRegion: string;
@@ -48,11 +49,11 @@ const RegionalComparison: React.FC<RegionalComparisonProps> = ({ selectedRegion,
     setLoading(true);
     try {
       // Try multiple approaches to get USA baseline data
-      let response = await fetch('http://localhost:8000/api/enriched-state/United%20States');
+      let response = await apiFetch('/api/enriched-state/United%20States');
       
       if (!response.ok) {
         // Try alternative endpoint
-        response = await fetch('http://localhost:8000/api/enriched-states');
+        response = await apiFetch('/api/enriched-states');
       }
       
       if (response.ok) {

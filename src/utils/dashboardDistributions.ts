@@ -62,17 +62,26 @@ export function generateStackedAreaData(
   incomeDistData: IncomeLorenzData | null = null,
   incomeSeriesByYear?: Record<number, IncomeLorenzData>
 ): StackedDistributionRow[] {
+  if (wealthData?.stacked_data?.length) return wealthData.stacked_data as StackedDistributionRow[];
+
   if (incomeSeriesByYear && Object.keys(incomeSeriesByYear).length > 0) {
     const sortedYears = Object.keys(incomeSeriesByYear)
       .map((y) => Number(y))
       .filter((y) => Number.isFinite(y))
       .sort((a, b) => a - b);
 
-    const rows = sortedYears.map((year) => {
-      const bucketMap = emptyIncomeBuckets();
-      addWaffleDataToBuckets(incomeSeriesByYear[year].waffle_data, bucketMap);
-      return bucketsToStackedRow(year, bucketMap);
-    });
+    const rows = sortedYears
+      .map((year) => {
+        const bucketMap = emptyIncomeBuckets();
+        addWaffleDataToBuckets(incomeSeriesByYear[year].waffle_data, bucketMap);
+        return bucketsToStackedRow(year, bucketMap);
+      })
+      .filter((row) => {
+        const total = Object.entries(row)
+          .filter(([key]) => key !== 'year')
+          .reduce((sum, [, value]) => sum + Number(value ?? 0), 0);
+        return total > 0;
+      });
 
     if (rows.length >= 2) return rows;
   }
@@ -88,9 +97,6 @@ export function generateStackedAreaData(
       { ...snapshotRow, year: incomeDistData.year + 1 },
     ];
   }
-
-  if (wealthData?.stacked_data?.length) return wealthData.stacked_data as StackedDistributionRow[];
-
   const years = [2015, 2016, 2017, 2018, 2019, 2020, 2021, 2022, 2023];
   return years.map(year => ({
     year,

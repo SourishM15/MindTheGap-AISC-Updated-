@@ -6,6 +6,7 @@ import MetricTooltip from './MetricTooltip';
 import SourceBadge from './SourceBadge';
 import ScaleComparison3D from './ScaleComparison3D';
 import { SCALE_METRICS, ScaleMetricKey } from './scaleComparisonConfig';
+import { apiFetch } from '../utils/api';
 
 interface StateMetrics {
   state: string;
@@ -32,6 +33,77 @@ interface ComparisonPanelProps {
   onStateAdd: (state: string) => void;
   onStateRemove: (state: string) => void;
 }
+
+interface EnrichedStateProfile {
+  demographics?: {
+    population?: number;
+    median_household_income?: number;
+    poverty_rate?: number;
+    education_bachelor_and_above?: number;
+  };
+  employment?: {
+    unemployment_data?: unknown;
+    acs_labor?: {
+      acs_unemployment_rate?: number;
+    };
+  };
+  economics?: {
+    indicators?: {
+      unemployment_rate?: {
+        data?: unknown;
+      };
+    };
+  };
+  opportunity?: {
+    labor?: {
+      labor_force_participation_rate?: number;
+      employment_population_ratio?: number;
+      acs_unemployment_rate?: number;
+    };
+    housing?: {
+      rent_burdened_rate?: number;
+      median_gross_rent?: number;
+      homeownership_rate?: number;
+    };
+    safety_net?: {
+      snap_household_rate?: number;
+    };
+    income?: {
+      per_capita_income?: number;
+    };
+  };
+  bea?: {
+    metrics?: Record<string, { value?: unknown }>;
+  };
+}
+
+const getLatestNumericValue = (values: unknown): number | undefined => {
+  if (!values || typeof values !== 'object') return undefined;
+  const entries = Object.entries(values as Record<string, unknown>);
+  const sortedEntries = entries.sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
+  for (const [, value] of sortedEntries) {
+    if (typeof value === 'number') return value;
+    if (value && typeof value === 'object') {
+      const rate = (value as { rate?: unknown }).rate;
+      if (typeof rate === 'number') return rate;
+    }
+  }
+  return undefined;
+};
+
+const getUnemploymentRate = (profile: EnrichedStateProfile): number | undefined => {
+  return (
+    getLatestNumericValue(profile.employment?.unemployment_data) ??
+    getLatestNumericValue(profile.economics?.indicators?.unemployment_rate?.data) ??
+    profile.employment?.acs_labor?.acs_unemployment_rate ??
+    profile.opportunity?.labor?.acs_unemployment_rate
+  );
+};
+
+const getBEAMetric = (profile: EnrichedStateProfile, key: string): number | undefined => {
+  const value = profile.bea?.metrics?.[key]?.value;
+  return typeof value === 'number' ? value : undefined;
+};
 
 const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
   selectedStates,
@@ -90,10 +162,10 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
       // Fetch state metrics
       for (const state of selectedStates) {
         try {
-          const response = await fetch(`http://localhost:8000/api/enriched-state/${state}`);
+          const response = await apiFetch(`/api/enriched-state/${encodeURIComponent(state)}`);
           if (response.ok) {
             const data = await response.json();
-            const profile = data.profile;
+            const profile = (data.profile ?? {}) as EnrichedStateProfile;
             const labor = profile?.opportunity?.labor ?? profile?.employment?.acs_labor;
             const housing = profile?.opportunity?.housing;
             const safetyNet = profile?.opportunity?.safety_net;
@@ -153,34 +225,6 @@ const ComparisonPanel: React.FC<ComparisonPanelProps> = ({
     const diff = ((value - usaValue) / usaValue) * 100;
     if (diff > 0) return `+${diff.toFixed(1)}%`;
     return `${diff.toFixed(1)}%`;
-  };
-
-  const getLatestNumericValue = (values: unknown): number | undefined => {
-    if (!values || typeof values !== 'object') return undefined;
-    const entries = Object.entries(values as Record<string, unknown>);
-    const sortedEntries = entries.sort(([dateA], [dateB]) => dateB.localeCompare(dateA));
-    for (const [, value] of sortedEntries) {
-      if (typeof value === 'number') return value;
-      if (value && typeof value === 'object') {
-        const rate = (value as { rate?: unknown }).rate;
-        if (typeof rate === 'number') return rate;
-      }
-    }
-    return undefined;
-  };
-
-  const getUnemploymentRate = (profile: any): number | undefined => {
-    return (
-      getLatestNumericValue(profile?.employment?.unemployment_data) ??
-      getLatestNumericValue(profile?.economics?.indicators?.unemployment_rate?.data) ??
-      profile?.employment?.acs_labor?.acs_unemployment_rate ??
-      profile?.opportunity?.labor?.acs_unemployment_rate
-    );
-  };
-
-  const getBEAMetric = (profile: any, key: string): number | undefined => {
-    const value = profile?.bea?.metrics?.[key]?.value;
-    return typeof value === 'number' ? value : undefined;
   };
 
   const leftMetrics = leftState ? metrics.get(leftState) : undefined;

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { FilterState } from '../types';
 import { DashboardRegionData, IncomeLorenzData, SAIPEData, VisualizationType, WealthDistributionData } from '../types/dashboard';
+import { apiFetch, apiUrl } from '../utils/api';
 import { getCanonicalRegion, getStateForRegion, isMetroRegion } from '../utils/dashboardRegions';
 
 interface UseDashboardDataArgs {
@@ -39,13 +40,13 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
       try {
         const stateForRegion = getStateForRegion(selectedRegion, canonicalRegion);
         const enrichedEndpoint = isMetro
-          ? `http://localhost:8000/api/enriched-metro/${encodeURIComponent(canonicalRegion)}`
-          : `http://localhost:8000/api/enriched-state/${canonicalRegion}`;
+          ? `/api/enriched-metro/${encodeURIComponent(canonicalRegion)}`
+          : `/api/enriched-state/${canonicalRegion}`;
 
         const [regionRes, wealthRes, saipeRes] = await Promise.all([
-          fetch(enrichedEndpoint),
-          fetch('http://localhost:8000/api/wealth-distribution'),
-          fetch(`http://localhost:8000/api/saipe-state/${stateForRegion}`),
+          apiFetch(enrichedEndpoint),
+          apiFetch('/api/wealth-distribution'),
+          apiFetch(`/api/saipe-state/${stateForRegion}`),
         ]);
 
         if (cancelled) return;
@@ -84,59 +85,8 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
   }, [selectedRegion, canonicalRegion, isMetro]);
 
   useEffect(() => {
-    const needsSeries = needsIncomeDistribution(visualizationType) && (filters.timeframe === 'historical' || filters.timeframe === 'forecast');
-    if (!needsSeries) return;
-
-    const seriesKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}`;
-    const existing = incomeSeriesCacheRef.current[seriesKey] ?? {};
-    const targetYears: number[] = [];
-    for (let y = 1989; y <= 2023; y++) {
-      if (!existing[y]) targetYears.push(y);
-    }
-    if (!targetYears.length) return;
-
-    let cancelled = false;
-
-    const fetchYear = async (year: number): Promise<void> => {
-      const stateForRegion = getStateForRegion(selectedRegion, canonicalRegion);
-      const endpoint = isMetro
-        ? `http://localhost:8000/api/income-lorenz-metro/${encodeURIComponent(canonicalRegion)}?year=${year}`
-        : `http://localhost:8000/api/income-lorenz/${stateForRegion}?year=${year}`;
-
-      const res = await fetch(endpoint);
-      if (cancelled || !res.ok) return;
-      const payload = await res.json();
-      if (cancelled || !payload.success || !payload.data?.year) return;
-
-      const normalized: IncomeLorenzData = {
-        ...payload.data,
-        state_specific: !!payload.state_specific,
-        metro_specific: !!payload.metro_specific,
-      };
-
-      if (!incomeSeriesCacheRef.current[seriesKey]) incomeSeriesCacheRef.current[seriesKey] = {};
-      incomeSeriesCacheRef.current[seriesKey][normalized.year] = normalized;
-      const pointCacheKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}:${normalized.year}`;
-      incomeCacheRef.current[pointCacheKey] = normalized;
-    };
-
-    const prefetch = async () => {
-      const chunkSize = 4;
-      for (let i = 0; i < targetYears.length; i += chunkSize) {
-        if (cancelled) return;
-        await Promise.all(targetYears.slice(i, i + chunkSize).map(fetchYear));
-      }
-    };
-
-    prefetch().catch(() => {
-      // Keep UI functional with on-demand point fetches even if warmup is partial.
-    });
-
-    return () => { cancelled = true; };
-  }, [selectedRegion, canonicalRegion, filters.timeframe, visualizationType, isMetro]);
-
-  useEffect(() => {
     if (!needsIncomeDistribution(visualizationType)) return;
+    if (visualizationType === 'stacked' && wealthData?.stacked_data?.length) return;
 
     let cancelled = false;
     const timer = setTimeout(async () => {
@@ -149,7 +99,7 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
           ? null
           : Math.max(1989, Math.min(2035, requestedIncomeYearRaw));
 
-        const seriesKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}`;
+        const seriesKey = `${isMetro ? 'metro' : 'state'}:${canonicalRegion}`;
         if (requestedIncomeYear != null) {
           const yearlyCached = incomeSeriesCacheRef.current[seriesKey]?.[requestedIncomeYear];
           if (yearlyCached) {
@@ -160,10 +110,10 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
 
         const stateForRegion = getStateForRegion(selectedRegion, canonicalRegion);
         const endpoint = isMetro
-          ? `http://localhost:8000/api/income-lorenz-metro/${encodeURIComponent(canonicalRegion)}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`
-          : `http://localhost:8000/api/income-lorenz/${stateForRegion}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`;
+          ? apiUrl(`/api/income-lorenz-metro/${encodeURIComponent(canonicalRegion)}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`)
+          : apiUrl(`/api/income-lorenz/${stateForRegion}${requestedIncomeYear ? `?year=${requestedIncomeYear}` : ''}`);
 
-        const cacheKey = `${isMetro ? 'metro' : 'state'}:${selectedRegion}:${requestedIncomeYear ?? 'latest'}`;
+        const cacheKey = `${isMetro ? 'metro' : 'state'}:${canonicalRegion}:${requestedIncomeYear ?? 'latest'}`;
         const cached = incomeCacheRef.current[cacheKey];
         if (cached) {
           setIncomeDistData(cached);
@@ -186,6 +136,10 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
             metro_specific: !!iData.metro_specific,
           };
           incomeCacheRef.current[cacheKey] = normalized;
+          if (normalized.year) {
+            if (!incomeSeriesCacheRef.current[seriesKey]) incomeSeriesCacheRef.current[seriesKey] = {};
+            incomeSeriesCacheRef.current[seriesKey][normalized.year] = normalized;
+          }
           setIncomeDistData(normalized);
         } else {
           setIncomeDistData(null);
@@ -199,9 +153,9 @@ export function useDashboardData({ filters, selectedRegion, visualizationType }:
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [selectedRegion, canonicalRegion, filters.timeframe, filters.yearRange, visualizationType, isMetro]);
+  }, [selectedRegion, canonicalRegion, filters.timeframe, filters.yearRange[1], visualizationType, isMetro, wealthData]);
 
-  const incomeSeriesByYear = incomeSeriesCacheRef.current[`${isMetro ? 'metro' : 'state'}:${selectedRegion}`];
+  const incomeSeriesByYear = incomeSeriesCacheRef.current[`${isMetro ? 'metro' : 'state'}:${canonicalRegion}`];
 
   return {
     canonicalRegion,

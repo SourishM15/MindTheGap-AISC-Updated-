@@ -1,4 +1,4 @@
-import { NeighborhoodDemographics, DemographicsSummary, NeighborhoodForecast, NeighborhoodHistory } from '../types/demographics';
+import { DemographicsSummary } from '../types/demographics';
 
 // Generate historical data from 2000 to 2019
 const generateHistoricalData = (startValue: number, endValue: number, startYear = 2000) => {

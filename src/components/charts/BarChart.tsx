@@ -24,7 +24,6 @@ const BarChart: React.FC<BarChartProps> = ({ metrics, compareMetrics, title }) =
     // Calculate bar width and spacing
     const totalBars = compareMetrics ? metrics.length * 2 : metrics.length;
     const barWidth = Math.min(40, (width / totalBars) * 0.8);
-    const groupWidth = compareMetrics ? barWidth * 2 + 10 : barWidth;
     const barSpacing = width / metrics.length;
 
     // Create SVG

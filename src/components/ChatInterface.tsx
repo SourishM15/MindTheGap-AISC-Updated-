@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../types';
 import { ChevronsDownUp, ChevronsUpDown, MessageCircle, Send } from 'lucide-react';
+import { apiFetch } from '../utils/api';
 
 interface ChatInterfaceProps {
   onChatQuery: (query: string) => void;
@@ -47,7 +48,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
         .filter(m => m.role !== 'system')
         .map(m => ({ role: m.role, content: m.content }));
 
-      const response = await fetch('http://localhost:8000/api/chat', {
+      const response = await apiFetch('/api/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

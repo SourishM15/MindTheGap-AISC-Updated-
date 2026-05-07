@@ -16,7 +16,7 @@ export interface EnrichedStateData {
       unemployment_rate?: number;
     };
     economics?: {
-      indicators?: any;
+      indicators?: Record<string, unknown>;
     };
   };
 }

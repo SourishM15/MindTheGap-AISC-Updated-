@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { STATE_DATA } from '../components/Map';
+import { apiFetch } from '../utils/api';
 
 export interface StateBenchmark {
   state: string;
@@ -43,13 +44,15 @@ type BenchmarksPayload = {
   generated_at?: string;
 };
 
+const isBenchmarkRow = (row: StateBenchmark): row is StateBenchmark => Boolean(row.state);
+
 let sharedPayload: BenchmarksPayload | null = null;
 let sharedRequest: Promise<BenchmarksPayload> | null = null;
 
 const fetchSharedBenchmarks = async (): Promise<BenchmarksPayload> => {
   if (sharedPayload) return sharedPayload;
   if (!sharedRequest) {
-    sharedRequest = fetch('http://localhost:8000/api/state-benchmarks')
+    sharedRequest = apiFetch('/api/state-benchmarks')
       .then((response) => {
         if (!response.ok) throw new Error('Benchmark request failed');
         return response.json();
@@ -95,8 +98,8 @@ export const useStateBenchmarks = () => {
 
         const fallbackByState = toMap(fallbackBenchmarks);
         const rows = (payload.benchmarks || [])
-          .filter((row: any) => row.state)
-          .map((row: any) => ({
+          .filter(isBenchmarkRow)
+          .map((row) => ({
             state: row.state,
             gini: row.gini != null ? Number(row.gini) : fallbackByState[row.state]?.gini,
             poverty: row.poverty != null ? Number(row.poverty) : fallbackByState[row.state]?.poverty,
