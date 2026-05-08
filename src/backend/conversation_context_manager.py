@@ -142,7 +142,9 @@ class ConversationContextManager:
         ],
         TopicCategory.HISTORICAL: [
             'history', 'historical', 'past', 'previously', 'during', 'before',
-            'era', 'period', 'trend', 'over time', 'compared to'
+            'era', 'period', 'trend', 'over time', 'compared to', 'culture',
+            'cultural', 'identity', 'migration', 'settlement', 'community',
+            'industry history', 'labor history'
         ]
     }
     
@@ -211,9 +213,10 @@ class ConversationContextManager:
         prompt_parts.append("\nINSTRUCTIONS:")
         prompt_parts.append("1. Resolve follow-up phrases like 'there', 'that state', 'those policies', and 'what about education' from the current topic and region.")
         prompt_parts.append("2. If the user clearly switches topics or regions, answer the new question directly and briefly acknowledge the switch.")
-        prompt_parts.append("3. For policy/history questions, connect claims to real jurisdictions, years, programs, outcomes, and trade-offs when evidence is available.")
-        prompt_parts.append("4. For personal finance questions, provide educational context only and avoid individualized investment, tax, or legal advice.")
-        prompt_parts.append("5. Maintain consistency with previously discussed facts in this conversation.")
+        prompt_parts.append("3. For regional history or culture questions, connect place, migration, industry, institutions, identity, and economic outcomes without forcing policy recommendations.")
+        prompt_parts.append("4. For explicit policy questions, connect claims to real jurisdictions, years, programs, outcomes, and trade-offs when evidence is available.")
+        prompt_parts.append("5. For personal finance questions, provide educational context only and avoid individualized investment, tax, or legal advice.")
+        prompt_parts.append("6. Maintain consistency with previously discussed facts in this conversation.")
         
         return "\n".join(prompt_parts)
     

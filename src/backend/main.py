@@ -637,7 +637,8 @@ Response Rules:
 - Default to 1-2 short sentences unless the user asks for detail, examples, recommendations, history, comparison, or a list.
 - Do not front-load caveats, program examples, or policy recommendations for broad questions like "what do you do?" or "tell me about Washington?"
 - Treat the user's latest message as controlling. Use previous turns to resolve pronouns and follow-ups, not to override the new question.
-- If the user asks about policy or state history, ground the answer in specific programs, places, years, measured outcomes, and trade-offs when available.
+- If the user asks about regional history or culture, discuss how place, identity, migration, industry, institutions, and economics interact without forcing a policy recommendation.
+- If the user explicitly asks about policy, ground the answer in specific programs, places, years, measured outcomes, and trade-offs when available.
 - If the user asks about finance, taxes, investing, debt, or budgeting, give educational economic context only. Do not provide individualized financial, tax, legal, or investment advice.
 - Distinguish data from interpretation, and flag missing or limited evidence instead of inventing facts.
 
@@ -782,7 +783,7 @@ def detect_government_data_query(question: str) -> str|None:
 POLICY_KEYWORDS = [
     'policy', 'policies', 'reform', 'legislation', 'law', 'program', 'initiative',
     'intervention', 'fix', 'improve', 'tackle', 'address', 'solve', 'solution',
-    'recommendation', 'strategy', 'what worked', 'what has been tried',
+    'recommendation', 'strategy', 'what worked', 'what failed', 'what has been tried',
     'past decisions', 'proven', 'effective', 'reduce inequality', 'reduce poverty',
     'trade-off', 'unintended consequence', 'public investment', 'tax credit',
 ]
@@ -790,6 +791,14 @@ POLICY_KEYWORDS = [
 HISTORY_KEYWORDS = [
     'history', 'historical', 'past', 'previously', 'before', 'since', 'trend',
     'over time', 'what happened', 'what changed', 'legacy', 'background',
+]
+
+CULTURE_KEYWORDS = [
+    'culture', 'cultural', 'identity', 'community', 'communities', 'local identity',
+    'migration', 'immigration', 'settlement', 'labor history', 'industry history',
+    'industrial history', 'religion', 'language', 'food', 'music', 'arts',
+    'neighborhood', 'neighborhoods', 'rural', 'urban', 'suburban', 'tribal',
+    'indigenous', 'native', 'black history', 'latino', 'hispanic', 'diaspora',
 ]
 
 PERSONAL_FINANCE_KEYWORDS = [
@@ -814,6 +823,23 @@ BROAD_LOCATION_STARTERS = [
     'give me an overview of', 'overview of'
 ]
 
+CONVERSATIONAL_PHRASES = [
+    'how are you',
+    'i am confused', "i'm confused", 'confused', 'explain that', 'explain this',
+    'say that differently', 'say it differently', 'simplify', 'simpler',
+    'plain english', 'what does that mean', 'what do you mean',
+    'why does that matter', 'why is that important', 'help me understand',
+    'walk me through', 'can you clarify', 'clarify', 'that makes sense',
+    'does that mean', 'so basically', 'in simple terms', 'what should i look at',
+    'how should i read', 'how do i use', 'where should i start',
+    'what am i looking at', 'what is this showing', 'talk me through',
+]
+
+ACKNOWLEDGEMENT_PHRASES = [
+    'ok', 'okay', 'cool', 'nice', 'got it', 'thanks', 'thank you',
+    'interesting', 'hmm', 'makes sense', 'that helps'
+]
+
 
 def wants_detailed_answer(question: str) -> bool:
     q_lower = question.lower()
@@ -835,19 +861,38 @@ def is_broad_location_question(question: str) -> bool:
     return has_location and has_broad_starter and not wants_detailed_answer(question)
 
 
+def is_regional_history_or_culture_query(question: str) -> bool:
+    q_lower = question.lower()
+    has_location = extract_location_from_query(question)["type"] is not None
+    asks_context = any(keyword in q_lower for keyword in HISTORY_KEYWORDS + CULTURE_KEYWORDS)
+    broad_regional = any(q_lower.strip().startswith(starter) for starter in BROAD_LOCATION_STARTERS)
+    return has_location and (asks_context or broad_regional)
+
+
+def is_conversational_query(question: str) -> bool:
+    q_lower = question.lower().strip()
+    compact = q_lower.strip(" .?!")
+    if compact in ACKNOWLEDGEMENT_PHRASES:
+        return True
+    if len(compact.split()) <= 4 and any(phrase == compact for phrase in ACKNOWLEDGEMENT_PHRASES):
+        return True
+    return any(phrase in q_lower for phrase in CONVERSATIONAL_PHRASES)
+
+
 def detect_policy_or_history_query(question: str, history: list[Message], topic: TopicCategory) -> bool:
     q_lower = question.lower()
-    explicit_policy_or_history = (
-        any(keyword in q_lower for keyword in POLICY_KEYWORDS)
-        or any(keyword in q_lower for keyword in HISTORY_KEYWORDS)
-    )
+    explicit_policy = any(keyword in q_lower for keyword in POLICY_KEYWORDS)
 
     if is_broad_location_question(question):
         return False
+    if is_regional_history_or_culture_query(question) and not explicit_policy:
+        return False
+    if is_conversational_query(question) and not explicit_policy:
+        return False
 
     is_policy_or_history = (
-        topic in (TopicCategory.POLICY_RECOMMENDATIONS, TopicCategory.HISTORICAL)
-        or explicit_policy_or_history
+        topic == TopicCategory.POLICY_RECOMMENDATIONS
+        or explicit_policy
     )
 
     # Carry forward policy/history intent for short follow-ups such as
@@ -855,7 +900,7 @@ def detect_policy_or_history_query(question: str, history: list[Message], topic:
     if not is_policy_or_history and len(question.split()) <= 8 and history:
         for msg in history[-6:]:
             msg_lower = msg.content.lower()
-            if any(kw in msg_lower for kw in POLICY_KEYWORDS + HISTORY_KEYWORDS):
+            if any(kw in msg_lower for kw in POLICY_KEYWORDS):
                 return True
 
     return is_policy_or_history
@@ -903,6 +948,26 @@ def render_policy_recommendations_context(recs: list, limit: int = 3) -> str:
             f"   Examples: {_compact_list(rec.get('historical_examples'), 2)}"
         )
     return "\n".join(lines)
+
+
+def build_regional_culture_prompt(
+    location: str,
+    location_type: str,
+    data_context: str,
+    question: str,
+) -> str:
+    return f"""You are a regional economics guide who can connect place, history, culture, and economic outcomes.
+Answer the user's question about {location} as a {location_type}. Explain how history, settlement patterns, industry, migration, culture, institutions, or local identity shaped today's economy when relevant.
+Do not turn this into policy recommendations unless the user explicitly asks for policies. Avoid stereotypes; describe groups and regions carefully and with nuance.
+Use the available data as grounding, but it is okay to add concise historical/cultural context from general knowledge. If you are uncertain about a specific historical detail, say so.
+Keep it conversational: 2-4 short sentences, then offer one natural follow-up angle.
+
+Available Economic/Demographic Data:
+{data_context}
+
+User Question: {question}
+
+Regional Context Response:"""
 
 
 def get_government_data_context(query: str, data_type: str) -> str:
@@ -982,10 +1047,12 @@ async def chat(request: ChatRequest):
 
         is_policy_query = detect_policy_or_history_query(question, request.conversation_history, topic)
         is_personal_finance = detect_personal_finance_query(question, topic)
+        is_conversation_query = is_conversational_query(question)
+        is_regional_context_query = is_regional_history_or_culture_query(question)
 
         if is_capability_question(question):
             prompt_text = f"""You are the MindTheGap economics assistant.
-Answer what you do in a warm, direct way. Mention that you help with state/city comparisons, wealth inequality data, policy history, and economic context.
+Answer what you do in a warm, direct way. Mention that you help with state/city comparisons, wealth inequality data, regional history and culture, policy history, and economic context.
 Keep it to 1-2 short sentences. Do not include policy examples or statistics unless the user asks.
 
 User Question: {question}
@@ -1004,6 +1071,31 @@ Brief Response:"""
                 "reply": reply,
                 "source": "llm_capability",
                 "query_type": "capability_question",
+            }
+
+        if is_conversation_query:
+            prompt_text = f"""You are a warm, conversational guide inside MindTheGap.
+Respond to the user's conversational or clarifying message naturally, using recent context if helpful.
+Do not turn this into a policy recommendation unless the user explicitly asks for one.
+If the user is confused, explain the core idea in plain English. If they are acknowledging something, respond briefly and offer a natural next step.
+Keep it to 1-3 short sentences.
+
+User Message: {question}
+
+Conversational Response:"""
+            llm = ChatGroq(
+                temperature=0.55,
+                groq_api_key=groq_api_key,
+                model_name=GROQ_MODEL,
+                max_tokens=180
+            )
+            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            reply = response.content if hasattr(response, 'content') else str(response)
+            context.add_message(role="assistant", content=reply, topic=topic.value)
+            return {
+                "reply": reply,
+                "source": "llm_conversational",
+                "query_type": "conversational_followup",
             }
 
         if is_personal_finance:
@@ -1198,7 +1290,15 @@ Source: Census Bureau (demographics), Bureau of Labor Statistics (employment), F
                     )
 
                 # Use LLM to articulate the data naturally
-                if policy_history_section:
+                if is_regional_context_query and not is_policy_query:
+                    prompt_text = build_regional_culture_prompt(
+                        location=location,
+                        location_type="state",
+                        data_context=data_context,
+                        question=question,
+                    )
+                    max_tokens = 380
+                elif policy_history_section:
                     prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
 Use the government data AND the historical policy evidence below to answer the user's question about {location}.
 Ground your response in what was actually tried in this region and what the documented outcomes were.
@@ -1245,7 +1345,7 @@ Natural Analysis:"""
                     "reply": reply,
                     "source": "enriched_analysis",
                     "location": location,
-                    "query_type": "state_policy_analysis" if is_policy_query else "state_analysis",
+                    "query_type": "state_policy_analysis" if is_policy_query else ("state_history_culture" if is_regional_context_query else "state_analysis"),
                     "policy_history_used": bool(policy_history_section),
                 }
 
@@ -1349,7 +1449,15 @@ Source: Census Bureau ACS (demographics), BLS LAUS (employment)
                     )
 
                 # Use LLM to articulate city data
-                if policy_history_section:
+                if is_regional_context_query and not is_policy_query:
+                    prompt_text = build_regional_culture_prompt(
+                        location=city_name,
+                        location_type="metro area",
+                        data_context=data_context,
+                        question=question,
+                    )
+                    max_tokens = 380
+                elif policy_history_section:
                     prompt_text = f"""You are a wealth and economics expert analyst with deep knowledge of regional policy history.
 Use the metro area data AND the historical policy evidence below to answer the user's question about {city_name}.
 Ground your response in what was actually tried in this region and what the documented outcomes were.
@@ -1398,7 +1506,7 @@ Natural Analysis:"""
                     "source": "city_metro_data_s3",
                     "city": city_name,
                     "metro_area": metro_area,
-                    "query_type": "city_policy_analysis" if is_policy_query else "city_analysis",
+                    "query_type": "city_policy_analysis" if is_policy_query else ("city_history_culture" if is_regional_context_query else "city_analysis"),
                     "policy_history_used": bool(policy_history_section),
                 }
 
@@ -1467,7 +1575,23 @@ Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-u
         # For general, non-location-specific questions, use semantic search + LLM
         graph_rag_context = get_graph_rag_context(question, graph)
 
-        if is_policy_query:
+        if is_regional_context_query and not is_policy_query:
+            loc = extract_location_from_query(question)
+            location_label = loc.get("name") or context.current_region or "the region"
+            prompt_text = f"""You are a regional economics guide who connects place, history, culture, and economic outcomes.
+Answer the user's question about {location_label}. Discuss relevant history, culture, migration, industry, community identity, institutions, or geography when useful.
+Do not turn this into policy recommendations unless the user explicitly asks for policies. Avoid stereotypes and be careful with uncertainty.
+Use the data/search context only as grounding; if the context is thin, give a concise general answer and say what evidence would make it stronger.
+Keep it conversational: 2-4 short sentences, then offer one natural follow-up angle.
+
+Data/Search Context:
+{graph_rag_context}
+
+User Question: {question}
+
+Regional Context Response:"""
+            max_tokens = 380
+        elif is_policy_query:
             # Policy question with no specific location — use PolicyRecommendationEngine
             # with national defaults and the full policy reference library
             region_data = {

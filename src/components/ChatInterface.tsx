@@ -12,7 +12,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ onChatQuery }) => {
     {
       id: '1',
       role: 'system',
-      content: 'Welcome! Ask me about U.S. wealth inequality - compare states and cities, explore income distribution, wealth gaps, historical trends, or demographic breakdowns. I have comprehensive government data on national, state, and metro area patterns.',
+      content: 'Welcome! Ask me about U.S. wealth inequality, compare states and cities, or explore how a region’s history, culture, industries, and demographics shape its economy. I can go deep on policy when you ask, but I can also keep things conversational.',
       timestamp: new Date()
     }
   ]);
