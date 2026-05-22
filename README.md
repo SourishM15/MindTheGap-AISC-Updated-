@@ -80,6 +80,24 @@ python main.py
 
 The API will be available at `http://localhost:8000`
 
+### Backend Deployment on Railway
+
+Create a Railway service from the GitHub repo and set the service root directory
+to `src/backend`. Railway will use `src/backend/railway.json` to install Python
+dependencies, download the spaCy model, and start FastAPI with:
+
+```bash
+uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+After Railway gives you a public backend URL, add it to Vercel as:
+
+```
+VITE_API_BASE_URL=https://your-railway-service.up.railway.app
+```
+
+Also set `CORS_ALLOW_ORIGINS` on Railway to your Vercel frontend URL.
+
 ## Configuration
 
 The backend requires environment variables for API authentication. Create a `.env` file in `src/backend/`:
