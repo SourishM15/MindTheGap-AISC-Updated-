@@ -179,6 +179,7 @@ class SAIPEClient:
         """
         if not self.api_key:
             return []
+        timeout_seconds = float(os.getenv("SAIPE_REQUEST_TIMEOUT_SECONDS", "6"))
         try:
             resp = requests.get(
                 SAIPE_BASE_URL,
@@ -188,7 +189,7 @@ class SAIPEClient:
                     "time": str(year),
                     "key": self.api_key,
                 },
-                timeout=15,
+                timeout=timeout_seconds,
             )
             resp.raise_for_status()
             rows = resp.json()

@@ -317,9 +317,10 @@ class CensusAPIClient:
             return {}
 
         target_year = year or int(self.YEAR)
+        timeout_seconds = float(os.getenv("CENSUS_REQUEST_TIMEOUT_SECONDS", "6"))
         try:
             url = self.get_url("NAME,B19083_001E", "state:*", year=target_year)
-            response = requests.get(url, timeout=15)
+            response = requests.get(url, timeout=timeout_seconds)
             response.raise_for_status()
             rows = response.json()
             if len(rows) < 2:

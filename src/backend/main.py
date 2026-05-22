@@ -4,6 +4,7 @@ import logging
 import json
 import secrets
 import time
+import asyncio
 from collections import defaultdict, deque
 from datetime import datetime
 from functools import lru_cache
@@ -181,6 +182,21 @@ def _benchmark_candidate_years() -> list[int]:
 
     lookback = max(1, min(int(os.getenv("STATE_BENCHMARK_LOOKBACK", "2")), 4))
     return _recent_release_years(max_lag=2, lookback=lookback)
+
+async def _call_benchmark_source(label: str, func, *, year: int):
+    """Run a blocking benchmark API call with a short API response budget."""
+    timeout_seconds = float(os.getenv("STATE_BENCHMARK_CALL_TIMEOUT_SECONDS", "8"))
+    try:
+        return await asyncio.wait_for(
+            asyncio.to_thread(func, year=year),
+            timeout=timeout_seconds,
+        )
+    except asyncio.TimeoutError:
+        logger.warning("%s benchmark request timed out for %s", label, year)
+        return [] if label == "SAIPE" else {}
+    except Exception as exc:
+        logger.warning("%s benchmark request failed for %s: %s", label, year, type(exc).__name__)
+        return [] if label == "SAIPE" else {}
 
 # ---------------------------------------------------------------------------
 # --- Enrichment Data Loading (Government Data from Supabase Storage) ---
@@ -2408,7 +2424,11 @@ async def get_state_benchmarks():
         saipe_rows = []
         saipe_year = None
         for candidate_year in candidate_years:
-            rows = saipe_client.get_all_states_snapshot(year=candidate_year)
+            rows = await _call_benchmark_source(
+                "SAIPE",
+                saipe_client.get_all_states_snapshot,
+                year=candidate_year,
+            )
             if rows:
                 saipe_rows = rows
                 saipe_year = candidate_year
@@ -2417,7 +2437,11 @@ async def get_state_benchmarks():
         gini_by_state = {}
         acs_year = None
         for candidate_year in candidate_years:
-            rows = census_client.get_all_state_gini(year=candidate_year)
+            rows = await _call_benchmark_source(
+                "ACS",
+                census_client.get_all_state_gini,
+                year=candidate_year,
+            )
             if rows:
                 gini_by_state = rows
                 acs_year = candidate_year
