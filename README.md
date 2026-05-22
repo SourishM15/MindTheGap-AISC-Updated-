@@ -129,6 +129,10 @@ Refer to the government agencies' websites to obtain API keys:
 
 ### Supabase Data Seeding
 
+Supabase GitHub integration expects a root-level `supabase/` directory. Use `.` as
+the integration working directory and `main` as the production branch. Schema
+changes should be committed as timestamped SQL files in `supabase/migrations/`.
+
 The backend expects prebuilt objects in Supabase Storage so state pages do not need to rebuild enriched data on every request. From `src/backend`, run:
 
 ```bash

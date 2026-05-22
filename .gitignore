@@ -55,6 +55,16 @@ src/backend/embeddings_cache.json
 *.db
 *.sqlite
 *.sqlite3
+*.backup
+*.dump
+*.sql.gz
+*.sql.zip
+
+# Supabase local/runtime artifacts
+supabase/.branches/
+supabase/.temp/
+supabase/.cache/
+supabase/.env*
 
 # Jupyter Notebook checkpoints
 .ipynb_checkpoints
