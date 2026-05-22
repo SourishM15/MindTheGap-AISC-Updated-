@@ -122,6 +122,7 @@ ALLOWED_HOSTS=your-api-domain.com
 ADMIN_API_KEY=use-a-long-random-secret
 RATE_LIMIT_WINDOW_SECONDS=60
 RATE_LIMIT_MAX_REQUESTS=60
+STATE_BENCHMARK_YEARS=2024,2023,2022
 ```
 
 The frontend API base URL is configured separately with `VITE_API_BASE_URL`; see `.env.example`.

@@ -162,6 +162,26 @@ def _recent_release_years(max_lag: int = 2, lookback: int = 8) -> list[int]:
     start = datetime.now().year - max_lag
     return list(range(start, start - lookback, -1))
 
+def _benchmark_candidate_years() -> list[int]:
+    """Return a short candidate list for live benchmark data.
+
+    This endpoint is user-facing, so keep live Census/SAIPE probing bounded for
+    hosted deployments. Override with STATE_BENCHMARK_YEARS=2024,2023,2022.
+    """
+    raw_years = os.getenv("STATE_BENCHMARK_YEARS", "")
+    if raw_years:
+        years: list[int] = []
+        for raw_year in raw_years.split(","):
+            try:
+                years.append(int(raw_year.strip()))
+            except ValueError:
+                logger.warning("Ignoring invalid STATE_BENCHMARK_YEARS value: %s", raw_year)
+        if years:
+            return years
+
+    lookback = max(1, min(int(os.getenv("STATE_BENCHMARK_LOOKBACK", "2")), 4))
+    return _recent_release_years(max_lag=2, lookback=lookback)
+
 # ---------------------------------------------------------------------------
 # --- Enrichment Data Loading (Government Data from Supabase Storage) ---
 @lru_cache(maxsize=1)
@@ -2383,9 +2403,11 @@ async def get_state_benchmarks():
             if age_seconds < _STATE_BENCHMARK_TTL_SECONDS:
                 return cached_payload
 
+        candidate_years = _benchmark_candidate_years()
+
         saipe_rows = []
         saipe_year = None
-        for candidate_year in _recent_release_years(max_lag=2, lookback=8):
+        for candidate_year in candidate_years:
             rows = saipe_client.get_all_states_snapshot(year=candidate_year)
             if rows:
                 saipe_rows = rows
@@ -2394,7 +2416,7 @@ async def get_state_benchmarks():
 
         gini_by_state = {}
         acs_year = None
-        for candidate_year in _recent_release_years(max_lag=2, lookback=8):
+        for candidate_year in candidate_years:
             rows = census_client.get_all_state_gini(year=candidate_year)
             if rows:
                 gini_by_state = rows
