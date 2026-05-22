@@ -198,6 +198,14 @@ async def _call_benchmark_source(label: str, func, *, year: int):
         logger.warning("%s benchmark request failed for %s: %s", label, year, type(exc).__name__)
         return [] if label == "SAIPE" else {}
 
+async def _invoke_chat_model(llm: ChatGroq, messages: list):
+    """Invoke the chat model without letting hosted requests hang indefinitely."""
+    timeout_seconds = float(os.getenv("CHAT_LLM_TIMEOUT_SECONDS", "12"))
+    return await asyncio.wait_for(
+        asyncio.to_thread(llm.invoke, messages),
+        timeout=timeout_seconds,
+    )
+
 # ---------------------------------------------------------------------------
 # --- Enrichment Data Loading (Government Data from Supabase Storage) ---
 @lru_cache(maxsize=1)
@@ -1100,7 +1108,7 @@ Brief Response:"""
                 model_name=GROQ_MODEL,
                 max_tokens=90
             )
-            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
             reply = response.content if hasattr(response, 'content') else str(response)
             context.add_message(role="assistant", content=reply, topic=topic.value)
             return {
@@ -1125,7 +1133,7 @@ Conversational Response:"""
                 model_name=GROQ_MODEL,
                 max_tokens=180
             )
-            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
             reply = response.content if hasattr(response, 'content') else str(response)
             context.add_message(role="assistant", content=reply, topic=topic.value)
             return {
@@ -1149,7 +1157,7 @@ Educational Response:"""
                 model_name=GROQ_MODEL,
                 max_tokens=220
             )
-            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
             reply = response.content if hasattr(response, 'content') else str(response)
             context.add_message(role="assistant", content=reply, topic=topic.value)
             return {
@@ -1173,7 +1181,7 @@ Response:"""
                 model_name=GROQ_MODEL,
                 max_tokens=150
             )
-            response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+            response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
             reply = response.content if hasattr(response, 'content') else str(response)
             
             # Track response in conversation context
@@ -1266,7 +1274,7 @@ Articulate Comparison:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+                response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track comparison in conversation context
@@ -1370,7 +1378,7 @@ Natural Analysis:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+                response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track in conversation context
@@ -1435,7 +1443,7 @@ Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-u
                     model_name=GROQ_MODEL,
                     max_tokens=650,
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+                response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, "content") else str(response)
                 context.add_message(role="assistant", content=reply, topic=topic.value)
                 context.current_region = f"{location} state"
@@ -1529,7 +1537,7 @@ Natural Analysis:"""
                     model_name=GROQ_MODEL,
                     max_tokens=max_tokens
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+                response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, 'content') else str(response)
                 
                 # Track in conversation context
@@ -1596,7 +1604,7 @@ Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-u
                     model_name=GROQ_MODEL,
                     max_tokens=650,
                 )
-                response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+                response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
                 reply = response.content if hasattr(response, "content") else str(response)
                 context.add_message(role="assistant", content=reply, topic=topic.value)
                 context.current_region = f"{city_name} metro"
@@ -1681,7 +1689,7 @@ Answer:"""
             model_name=GROQ_MODEL,
             max_tokens=max_tokens,
         )
-        response = llm.invoke(history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
+        response = await _invoke_chat_model(llm, history_messages + [HumanMessage(content=prepend_chat_preamble(prompt_text, context, question))])
         reply = response.content if hasattr(response, 'content') else str(response)
 
         # Track general question in conversation context
@@ -1693,6 +1701,18 @@ Answer:"""
             "query_type": "general_policy_question" if is_policy_query else "general_question",
         }
         
+    except asyncio.TimeoutError:
+        logger.warning("Chat model timed out for request: %s", question)
+        reply = (
+            "I'm having trouble getting a live AI response right now, but the data dashboard is still available. "
+            "Try again in a moment or ask a narrower state/city comparison."
+        )
+        context.add_message(role="assistant", content=reply, topic=topic.value)
+        return {
+            "reply": reply,
+            "source": "llm_timeout_fallback",
+            "query_type": "temporary_backend_timeout",
+        }
     except Exception as e:
         logger.error(f"Chat error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
