@@ -62,7 +62,7 @@ class VectorStore:
             return np.array(self.embeddings_cache[text])
         
         # Generate embedding
-        embedding = model.encode(text, convert_to_numpy=True)
+        embedding = model.encode(text, convert_to_numpy=True, show_progress_bar=False)
         self.embeddings_cache[text] = embedding.tolist()
         
         return embedding
