@@ -326,14 +326,27 @@ Your responses should:
     
     return base_prompt
 
-# Load enrichment data at startup
-ENRICHMENT_DATA = load_enrichment_knowledge_base()
-ENHANCED_SYSTEM_PROMPT = get_enhanced_system_prompt()
-logger.info(f"Enrichment knowledge base status: {ENRICHMENT_DATA['status']}")
-
-# Initialize conversation context manager for better topic/context switching
+ENRICHMENT_DATA = None
+ENHANCED_SYSTEM_PROMPT = None
 CONVERSATION_MANAGER = ConversationContextManager()
 logger.info("✓ Conversation context manager initialized")
+
+
+def get_enrichment_data() -> dict:
+    """Load enrichment data only when an endpoint needs it."""
+    global ENRICHMENT_DATA
+    if ENRICHMENT_DATA is None:
+        ENRICHMENT_DATA = load_enrichment_knowledge_base()
+        logger.info(f"Enrichment knowledge base status: {ENRICHMENT_DATA['status']}")
+    return ENRICHMENT_DATA
+
+
+def get_enhanced_prompt_cached() -> str:
+    """Build the enhanced system prompt lazily to keep hosted startup light."""
+    global ENHANCED_SYSTEM_PROMPT
+    if ENHANCED_SYSTEM_PROMPT is None:
+        ENHANCED_SYSTEM_PROMPT = get_enhanced_system_prompt()
+    return ENHANCED_SYSTEM_PROMPT
 
 # --- Data Loading (from Supabase or CSV fallback) ---
 from supabase_db import get_db, supabase_client
@@ -421,26 +434,33 @@ def load_data_and_create_graph():
     logger.error("❌ No data loaded from either source")
     return G, [], False
 
-# Load data at startup
-graph, all_records, using_supabase = load_data_and_create_graph()
+graph = None
+all_records = []
+using_supabase = False
 
-if graph and len(all_records) > 0:
-    logger.info(f"✓ Graph created with {graph.number_of_nodes()} nodes")
-    
-    if os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() == "true":
-        # Initialize vector store with all records for semantic search.
-        try:
-            from vector_embeddings import VectorStore
 
-            vector_store = VectorStore()
-            vector_store.add_documents(all_records)
-            logger.info("✓ Vector embeddings initialized")
-        except Exception as e:
-            logger.warning(f"Could not initialize vector store: {e}")
-    else:
-        logger.info("Semantic search disabled; using keyword graph search")
-else:
-    logger.error("❌ Failed to load data from any source")
+def get_graph_data():
+    """Load graph data on first use instead of during server startup."""
+    global graph, all_records, using_supabase
+    if graph is None:
+        graph, all_records, using_supabase = load_data_and_create_graph()
+        if graph and len(all_records) > 0:
+            logger.info(f"✓ Graph created with {graph.number_of_nodes()} nodes")
+
+            if os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() == "true":
+                try:
+                    from vector_embeddings import VectorStore
+
+                    vector_store = VectorStore()
+                    vector_store.add_documents(all_records)
+                    logger.info("✓ Vector embeddings initialized")
+                except Exception as e:
+                    logger.warning(f"Could not initialize vector store: {e}")
+            else:
+                logger.info("Semantic search disabled; using keyword graph search")
+        else:
+            logger.error("❌ Failed to load data from any source")
+    return graph, all_records, using_supabase
 
 # --- LangChain and RAG Setup ---
 def setup_llm_chain():
@@ -482,12 +502,7 @@ Detailed Analysis:"""
     llm_chain = prompt | llm
     return llm_chain
 
-try:
-    llm_chain = setup_llm_chain()
-    logger.info("✓ LLM chain initialized successfully")
-except Exception as e:
-    logger.error(f"Error initializing LLM chain: {e}")
-    llm_chain = None
+llm_chain = None
 # --- API Endpoints ---
 
 @app.get("/")
@@ -510,7 +525,7 @@ def health_check():
     return {
         "status": "ok",
         "graph_loaded": graph is not None,
-        "llm_available": llm_chain is not None
+        "llm_available": bool(groq_api_key)
     }
 
 def _storage_folder_names(prefix: str) -> list[str]:
@@ -1059,7 +1074,8 @@ def get_government_data_context(query: str, data_type: str) -> str:
 @app.post("/api/chat")
 async def chat(request: ChatRequest):
     """Smart conversation-aware chat with natural language + enriched government data + context management"""
-    if not graph:
+    current_graph, _, _ = get_graph_data()
+    if not current_graph:
         raise HTTPException(status_code=500, detail="Graph not loaded. Check data files.")
     
     question = request.message
@@ -1399,7 +1415,7 @@ Natural Analysis:"""
             elif is_policy_query:
                 # State profile not in Supabase — use PolicyRecommendationEngine with
                 # national baseline metrics to still return evidence-based recommendations
-                graph_ctx = get_graph_rag_context(question, graph)
+                graph_ctx = get_graph_rag_context(question, current_graph)
                 policy_hist = get_policy_history_context(
                     region=location,
                     current_metrics={"poverty_rate": 11.5, "gini_coefficient": 0.49},
@@ -1560,7 +1576,7 @@ Natural Analysis:"""
             elif is_policy_query:
                 # City profile not in Supabase — use PolicyRecommendationEngine with
                 # national baseline so policy questions still get a full answer
-                graph_ctx = get_graph_rag_context(question, graph)
+                graph_ctx = get_graph_rag_context(question, current_graph)
                 policy_hist = get_policy_history_context(
                     region=city_name,
                     current_metrics={"poverty_rate": 11.5, "gini_coefficient": 0.49},
@@ -1620,7 +1636,7 @@ Honest Policy Analysis (compact but substantive, 2-3 short bullets plus follow-u
                 }
 
         # For general, non-location-specific questions, use semantic search + LLM
-        graph_rag_context = get_graph_rag_context(question, graph)
+        graph_rag_context = get_graph_rag_context(question, current_graph)
 
         if is_regional_context_query and not is_policy_query:
             loc = extract_location_from_query(question)
@@ -1725,13 +1741,14 @@ Answer:"""
 @app.post("/api/trends")
 async def analyze_trends(request: TrendRequest):
     """Analyze wealth or income trends for a demographic category"""
-    if not graph:
+    current_graph, _, _ = get_graph_data()
+    if not current_graph:
         raise HTTPException(status_code=500, detail="Graph not loaded.")
     
     try:
         # Filter nodes by data type and category
         relevant_data = []
-        for node_id, node_data in graph.nodes(data=True):
+        for node_id, node_data in current_graph.nodes(data=True):
             if node_data.get('data_type') == request.category:
                 if request.demographic is None or request.demographic in str(node_data.get('Category', '')):
                     relevant_data.append(node_data)
@@ -2065,13 +2082,14 @@ async def clear_cache(_: None = Depends(_require_admin)):
 @app.get("/api/data-stats")
 async def data_stats():
     """Get statistics about loaded data"""
-    if not graph:
+    current_graph, _, _ = get_graph_data()
+    if not current_graph:
         return {"message": "No data loaded"}
     
     data_types = {}
     dates = set()
     
-    for node_id, node_data in graph.nodes(data=True):
+    for node_id, node_data in current_graph.nodes(data=True):
         dtype = node_data.get('data_type', 'unknown')
         date = node_data.get('Date', 'unknown')
         
@@ -2079,8 +2097,8 @@ async def data_stats():
         dates.add(date)
     
     return {
-        "total_nodes": graph.number_of_nodes(),
-        "total_edges": graph.number_of_edges(),
+        "total_nodes": current_graph.number_of_nodes(),
+        "total_edges": current_graph.number_of_edges(),
         "data_types": data_types,
         "date_range": {
             "count": len(dates),
@@ -2876,10 +2894,11 @@ async def get_wealth_distribution():
 @app.get("/api/chatbot-knowledge-base")
 async def get_chatbot_knowledge_base():
     """Get chatbot's enriched knowledge base and learned patterns"""
+    enrichment_data = get_enrichment_data()
     return {
-        "status": ENRICHMENT_DATA['status'],
-        "knowledge_base_available": ENRICHMENT_DATA['knowledge_base'] is not None,
-        "patterns_learned": len(ENRICHMENT_DATA['correlations']) if ENRICHMENT_DATA['correlations'] else 0,
+        "status": enrichment_data['status'],
+        "knowledge_base_available": enrichment_data['knowledge_base'] is not None,
+        "patterns_learned": len(enrichment_data['correlations']) if enrichment_data['correlations'] else 0,
         "data_sources": ["Census Bureau", "Bureau of Labor Statistics", "Federal Reserve (FRED)"],
         "enrichment_date": "2026-02-12",
         "message": "Chatbot has been trained on enriched government data for all 50 US states"
