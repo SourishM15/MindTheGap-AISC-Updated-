@@ -13,8 +13,6 @@ from typing import Any, Optional, Annotated
 from pydantic import BaseModel, Field
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import pandas as pd
-import networkx as nx
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from langchain_core.prompts import PromptTemplate
 from langchain_groq import ChatGroq
@@ -31,20 +29,31 @@ from policy_recommendations import (
 from conversation_context_manager import ConversationContextManager, TopicCategory
 from regional_policy_history import get_policy_history_context, get_policy_brief_for_api, get_available_regions
 from government_api import get_local_economic_indicators, clear_api_cache
-from s3_data_loader import s3_loader
-from city_api_client import city_client
 from saipe_api_client import saipe_client, STATE_FIPS as SAIPE_STATE_FIPS
 from census_api_client import CensusAPIClient
 from bea_api_client import BEAAPIClient
-from data_enrichment_pipeline import STATES
-from state_profile_builder import build_api_enriched_metro_profile, build_api_enriched_state_profile
 
-census_client = CensusAPIClient()
-bea_client = BEAAPIClient()
 _STATE_BENCHMARK_CACHE: dict = {"payload": None, "created_at": None}
 _STATE_BENCHMARK_TTL_SECONDS = 60 * 60
 _LIVE_STATE_PROFILE_CACHE: dict[str, dict] = {}
 _SUPABASE_STORAGE_BUCKET = "mindthegap-gov-data"
+_census_client = None
+_bea_client = None
+_city_client = None
+_s3_loader = None
+
+STATE_NAMES = (
+    'Alabama', 'Alaska', 'Arizona', 'Arkansas', 'California', 'Colorado',
+    'Connecticut', 'Delaware', 'Florida', 'Georgia', 'Hawaii', 'Idaho',
+    'Illinois', 'Indiana', 'Iowa', 'Kansas', 'Kentucky', 'Louisiana',
+    'Maine', 'Maryland', 'Massachusetts', 'Michigan', 'Minnesota',
+    'Mississippi', 'Missouri', 'Montana', 'Nebraska', 'Nevada',
+    'New Hampshire', 'New Jersey', 'New Mexico', 'New York',
+    'North Carolina', 'North Dakota', 'Ohio', 'Oklahoma', 'Oregon',
+    'Pennsylvania', 'Rhode Island', 'South Carolina', 'South Dakota',
+    'Tennessee', 'Texas', 'Utah', 'Vermont', 'Virginia', 'Washington',
+    'West Virginia', 'Wisconsin', 'Wyoming',
+)
 
 # Configure logging
 logging.basicConfig(
@@ -65,6 +74,38 @@ if not groq_api_key:
 def _env_csv(name: str, default: str) -> list[str]:
     raw = os.getenv(name, default)
     return [item.strip() for item in raw.split(",") if item.strip()]
+
+
+def get_census_client() -> CensusAPIClient:
+    global _census_client
+    if _census_client is None:
+        _census_client = CensusAPIClient()
+    return _census_client
+
+
+def get_bea_client() -> BEAAPIClient:
+    global _bea_client
+    if _bea_client is None:
+        _bea_client = BEAAPIClient()
+    return _bea_client
+
+
+def get_city_client():
+    global _city_client
+    if _city_client is None:
+        from city_api_client import CityAPIClient
+
+        _city_client = CityAPIClient()
+    return _city_client
+
+
+def get_s3_loader():
+    global _s3_loader
+    if _s3_loader is None:
+        from s3_data_loader import S3DataLoader
+
+        _s3_loader = S3DataLoader()
+    return _s3_loader
 
 
 APP_ENV = os.getenv("APP_ENV", "development").lower()
@@ -348,11 +389,11 @@ def get_enhanced_prompt_cached() -> str:
         ENHANCED_SYSTEM_PROMPT = get_enhanced_system_prompt()
     return ENHANCED_SYSTEM_PROMPT
 
-# --- Data Loading (from Supabase or CSV fallback) ---
-from supabase_db import get_db, supabase_client
-
 def load_data_and_create_graph():
     """Loads data from Supabase (or CSV fallback) and creates a graph."""
+    import networkx as nx
+    import pandas as pd
+    from supabase_db import get_db
     
     G = nx.Graph()
     all_records = []
@@ -560,7 +601,8 @@ def _profile_freshness(profile: dict[str, Any]) -> dict[str, Any]:
 @app.get("/api/data-health")
 async def data_health():
     """Summarize Supabase Storage coverage for prebuilt data assets."""
-    expected_state_slugs = sorted(_safe_slug(name) for name in STATES.values())
+    city_client = get_city_client()
+    expected_state_slugs = sorted(_safe_slug(name) for name in STATE_NAMES)
     expected_metro_slugs = sorted(_safe_slug(name) for name in city_client.metro_areas.keys())
 
     result: dict[str, Any] = {
@@ -1035,6 +1077,7 @@ Regional Context Response:"""
 def get_government_data_context(query: str, data_type: str) -> str:
     """Fetch relevant government data for the query"""
     try:
+        s3_loader = get_s3_loader()
         if data_type == 'employment':
             results = s3_loader.search_government_data(query, 'bls')
             if results['bls']:
@@ -1960,6 +2003,8 @@ async def get_policy_history(
 @app.get("/api/wealth-data")
 async def get_wealth_data(category: str = None, limit: int = 100):
     """Get wealth distribution data directly from Supabase"""
+    from supabase_db import get_db
+
     db = get_db()
     
     if not db or not db.client:
@@ -1980,6 +2025,8 @@ async def get_wealth_data(category: str = None, limit: int = 100):
 @app.get("/api/demographics")
 async def get_demographics(demographic_type: str = "race", group: str = None, limit: int = 100):
     """Get demographic data directly from Supabase"""
+    from supabase_db import get_db
+
     db = get_db()
     
     if not db or not db.client:
@@ -2001,6 +2048,8 @@ async def get_demographics(demographic_type: str = "race", group: str = None, li
 @app.get("/api/economic-indicators/{state}")
 async def get_state_indicators(state: str):
     """Get economic indicators for a specific state from Supabase"""
+    from supabase_db import get_db
+
     db = get_db()
     
     if not db or not db.client:
@@ -2022,6 +2071,8 @@ async def get_state_indicators(state: str):
 @app.get("/api/state-metrics/{state_name}")
 async def get_normalized_state_metrics(state_name: str):
     """Get latest normalized state metrics from Supabase."""
+    from supabase_db import get_db
+
     db = get_db()
 
     if not db or not db.client:
@@ -2112,6 +2163,7 @@ async def data_stats():
 async def get_s3_government_data(data_type: str, query: str = None):
     """Get government data from S3 (census, bls, or fred)"""
     try:
+        s3_loader = get_s3_loader()
         if data_type == "census":
             if query:
                 data = s3_loader.get_demographic_info(query)
@@ -2154,6 +2206,7 @@ async def search_s3_data(query: str, data_type: str = "all"):
     # Limit query length to prevent abuse
     query = query[:200]
     try:
+        s3_loader = get_s3_loader()
         results = s3_loader.search_government_data(query, data_type)
         
         return {
@@ -2175,6 +2228,7 @@ async def search_s3_data(query: str, data_type: str = "all"):
 async def get_s3_stats():
     """Get S3 bucket statistics"""
     try:
+        s3_loader = get_s3_loader()
         stats = s3_loader.get_s3_stats()
         return stats
     
@@ -2235,7 +2289,7 @@ async def get_income_lorenz(
                 "data": None,
             }
 
-        data = census_client.get_state_income_distribution(fips, year=year)
+        data = get_census_client().get_state_income_distribution(fips, year=year)
         if not data:
             return {"success": False, "error": f"No income distribution data for {state_name}"}
 
@@ -2262,6 +2316,7 @@ async def get_income_lorenz_metro(
     from Census ACS metro-level income bracket tables.
     """
     try:
+        city_client = get_city_client()
         if metro_name not in city_client.metro_areas:
             raise HTTPException(status_code=404, detail=f"Metro area not found: {metro_name}")
 
@@ -2294,7 +2349,7 @@ async def get_bea_state(state_name: str):
         if not fips or fips == "00":
             raise HTTPException(status_code=404, detail=f"State not found: {state_name}")
 
-        data = bea_client.get_state_regional_profile(fips)
+        data = get_bea_client().get_state_regional_profile(fips)
         if not data:
             return {
                 "success": False,
@@ -2320,6 +2375,8 @@ async def get_bea_state(state_name: str):
 async def get_enriched_state(state_name: str):
     """Get enriched government data for a specific state, including SAIPE poverty/income."""
     try:
+        census_client = get_census_client()
+        bea_client = get_bea_client()
         # Special case: United States — build national summary from SAIPE + DFA
         if state_name.strip().lower() in ("united states", "united-states", "us"):
             saipe_us = saipe_client.get_state_snapshot("united-states", year=2023)
@@ -2357,6 +2414,8 @@ async def get_enriched_state(state_name: str):
             # Pre-built Supabase profile not available — build a live profile from
             # free government APIs instead of returning an error.
             logger.info(f"No Supabase profile for {state_name}; building live profile from government APIs")
+            from state_profile_builder import build_api_enriched_state_profile
+
             profile = build_api_enriched_state_profile(
                 state_name,
                 census_client=census_client,
@@ -2418,6 +2477,10 @@ async def list_enriched_states():
     """List all states with enriched government data available"""
     # First try Supabase Storage listing; fall back to the full 50-state SAIPE list
     try:
+        from supabase_db import supabase_client
+
+        if not supabase_client:
+            raise RuntimeError("Supabase client unavailable")
         files = supabase_client.storage.from_('mindthegap-gov-data').list(
             'enriched-regional-data/state-profiles'
         )
@@ -2479,6 +2542,7 @@ async def get_state_benchmarks():
 
         gini_by_state = {}
         acs_year = None
+        census_client = get_census_client()
         for candidate_year in candidate_years:
             rows = await _call_benchmark_source(
                 "ACS",
@@ -2539,6 +2603,9 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
     """Enrich all metro areas and upload to S3 (admin endpoint)"""
     try:
         logger.info("Starting metro area enrichment...")
+        import pandas as pd
+
+        city_client = get_city_client()
         
         # Get all metro profiles from city_api_client
         all_metros = city_client.get_all_metro_profiles()
@@ -2554,6 +2621,10 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
         
         for metro_name, metro_data in all_metros.items():
             try:
+                from supabase_db import supabase_client
+
+                if not supabase_client:
+                    raise RuntimeError("Supabase client unavailable")
                 metro_slug = metro_name.lower().replace(' ', '-')
                 storage_key = f'enriched-regional-data/metro-areas/{metro_slug}/profile.json'
                 
@@ -2585,6 +2656,10 @@ async def enrich_metro_areas(_: None = Depends(_require_admin)):
 async def list_enriched_metro_areas():
     """List all metro areas with enriched government data available"""
     try:
+        from supabase_db import supabase_client
+
+        if not supabase_client:
+            raise RuntimeError("Supabase client unavailable")
         files = supabase_client.storage.from_('mindthegap-gov-data').list(
             'enriched-regional-data/metro-areas'
         )
@@ -2606,6 +2681,7 @@ async def list_enriched_metro_areas():
 @app.get("/api/enriched-metro/{metro_name}")
 async def get_enriched_metro(metro_name: str):
     """Get enriched government data for a specific metro area."""
+    city_client = get_city_client()
     # Allowlist check — only accept known metro names
     if metro_name not in city_client.metro_areas:
         raise HTTPException(status_code=404, detail=f"Metro area not found: {metro_name}")
@@ -2615,6 +2691,8 @@ async def get_enriched_metro(metro_name: str):
 
         # If no S3 profile, build one from live APIs
         if not profile:
+            from state_profile_builder import build_api_enriched_metro_profile
+
             profile = build_api_enriched_metro_profile(metro_name, city_client=city_client)
 
             if not profile:
@@ -2753,6 +2831,9 @@ async def get_wealth_distribution():
       - Gini coefficient: FRED API (SIPOVGINIUSA) or derived from DFA
     """
     try:
+        import pandas as pd
+
+        s3_loader = get_s3_loader()
         # ── 1. LORENZ CURVE (from networth-shares, latest quarter) ─────────
         # Loads from S3 (government-data/census/dfa-networth-shares.csv) with local fallback
         nw_df = s3_loader.load_dfa_dataframe('dfa-networth-shares.csv')
