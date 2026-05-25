@@ -82,6 +82,11 @@ The API will be available at `http://localhost:8000`
 
 ## Deployment
 
+### Live Deployment
+
+- Frontend: https://mindthe-gap.netlify.app
+- Backend API: https://mindthegap-api.onrender.com
+
 This project deploys as two services:
 
 - **Frontend:** Netlify builds the Vite/React app from GitHub and serves `dist/`.
