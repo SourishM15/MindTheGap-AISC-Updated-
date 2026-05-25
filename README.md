@@ -127,6 +127,36 @@ VITE_API_BASE_URL=https://your-railway-service.up.railway.app
 
 Also set `CORS_ALLOW_ORIGINS` on Railway to your Netlify frontend URL.
 
+### Backend Deployment on Render
+
+If Railway gives you trouble, Render can run the FastAPI backend from the same
+GitHub repo. The repo includes `render.yaml` for a Render Blueprint.
+
+1. In Render, choose **New** > **Blueprint** and select this GitHub repo.
+2. Render should create a `mindthegap-api` web service using:
+
+```text
+Root directory: src/backend
+Build command: pip install -r requirements.txt && python -m spacy download en_core_web_sm
+Start command: uvicorn main:app --host 0.0.0.0 --port $PORT
+```
+
+3. Add the secret environment variables in Render. Use
+   `src/backend/.env.example` as the checklist.
+4. After Render gives you a URL like
+   `https://mindthegap-api.onrender.com`, set:
+
+```text
+ALLOWED_HOSTS=mindthegap-api.onrender.com
+CORS_ALLOW_ORIGINS=https://mindthe-gap.netlify.app
+```
+
+5. In Netlify, set the frontend API URL and redeploy:
+
+```text
+VITE_API_BASE_URL=https://mindthegap-api.onrender.com
+```
+
 ## Configuration
 
 The backend requires environment variables for API authentication. Create a `.env` file in `src/backend/`:
