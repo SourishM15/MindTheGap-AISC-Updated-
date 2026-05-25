@@ -21,8 +21,6 @@ from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from dotenv import load_dotenv
 from graph_rag import get_graph_rag_context
-from vector_embeddings import VectorStore
-from trend_analysis import TrendAnalyzer, analyze_wealth_gap_trends
 from policy_recommendations import (
     get_policy_recommendations_for_region,
     reload_policy_database,
@@ -429,13 +427,18 @@ graph, all_records, using_supabase = load_data_and_create_graph()
 if graph and len(all_records) > 0:
     logger.info(f"✓ Graph created with {graph.number_of_nodes()} nodes")
     
-    # Initialize vector store with all records for semantic search
-    try:
-        vector_store = VectorStore()
-        vector_store.add_documents(all_records)
-        logger.info("✓ Vector embeddings initialized")
-    except Exception as e:
-        logger.warning(f"Could not initialize vector store: {e}")
+    if os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() == "true":
+        # Initialize vector store with all records for semantic search.
+        try:
+            from vector_embeddings import VectorStore
+
+            vector_store = VectorStore()
+            vector_store.add_documents(all_records)
+            logger.info("✓ Vector embeddings initialized")
+        except Exception as e:
+            logger.warning(f"Could not initialize vector store: {e}")
+    else:
+        logger.info("Semantic search disabled; using keyword graph search")
 else:
     logger.error("❌ Failed to load data from any source")
 
@@ -1740,6 +1743,8 @@ async def analyze_trends(request: TrendRequest):
             }
         
         # Perform trend analysis
+        from trend_analysis import TrendAnalyzer
+
         analysis = TrendAnalyzer.trend_analysis(relevant_data)
         
         return {

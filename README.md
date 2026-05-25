@@ -137,7 +137,7 @@ GitHub repo. The repo includes `render.yaml` for a Render Blueprint.
 
 ```text
 Root directory: src/backend
-Build command: pip install -r requirements.txt && python -m spacy download en_core_web_sm
+Build command: pip install -r requirements.txt
 Start command: uvicorn main:app --host 0.0.0.0 --port $PORT
 ```
 
@@ -176,6 +176,7 @@ For production, also set the security controls:
 ```
 APP_ENV=production
 ENABLE_API_DOCS=false
+ENABLE_SEMANTIC_SEARCH=false
 CORS_ALLOW_ORIGINS=https://your-frontend-domain.com
 ALLOWED_HOSTS=your-api-domain.com
 ADMIN_API_KEY=use-a-long-random-secret

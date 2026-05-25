@@ -1,9 +1,7 @@
-import spacy
+import os
 import networkx as nx
 from typing import List, Dict, Any, Tuple
 from thefuzz import process, fuzz
-from vector_embeddings import VectorStore, create_wealth_query_embedding
-from trend_analysis import TrendAnalyzer, analyze_wealth_gap_trends
 from government_api import get_local_economic_indicators
 from census_api_client import CensusAPIClient, STATE_FIPS as CENSUS_STATE_FIPS
 import logging
@@ -30,21 +28,44 @@ _STATE_NAME_TO_ABBR = {
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Load the spaCy model
-try:
-    nlp = spacy.load("en_core_web_sm")
-except OSError:
-    logger.info("Downloading spaCy model 'en_core_web_sm'...")
-    import spacy.cli
-    spacy.cli.download("en_core_web_sm")
-    nlp = spacy.load("en_core_web_sm")
+_nlp = None
+_vector_store = None
 
-# Initialize vector store for semantic search
-vector_store = VectorStore()
+
+def _semantic_search_enabled() -> bool:
+    return os.getenv("ENABLE_SEMANTIC_SEARCH", "false").lower() == "true"
+
+
+def _get_nlp():
+    """Lazy-load spaCy only when semantic search is enabled."""
+    global _nlp
+    if not _semantic_search_enabled():
+        return None
+    if _nlp is None:
+        try:
+            import spacy
+
+            _nlp = spacy.load("en_core_web_sm")
+        except OSError:
+            logger.warning("spaCy model 'en_core_web_sm' unavailable; using keyword extraction")
+            _nlp = None
+    return _nlp
+
+
+def _get_vector_store():
+    """Lazy-load vector search only when semantic search is enabled."""
+    global _vector_store
+    if not _semantic_search_enabled():
+        return None
+    if _vector_store is None:
+        from vector_embeddings import VectorStore
+
+        _vector_store = VectorStore()
+    return _vector_store
 
 def extract_entities(question: str) -> Dict[str, Any]:
     """Extracts wealth-related and geographic entities from the question."""
-    doc = nlp(question)
+    nlp = _get_nlp()
     entities = {
         'geographic': [],
         'wealth_groups': [],
@@ -54,7 +75,10 @@ def extract_entities(question: str) -> Dict[str, Any]:
     }
     
     # Extract geographic entities
-    geographic_entities = [ent.text for ent in doc.ents if ent.label_ in ["GPE", "LOC"]]
+    geographic_entities = []
+    if nlp is not None:
+        doc = nlp(question)
+        geographic_entities = [ent.text for ent in doc.ents if ent.label_ in ["GPE", "LOC"]]
     
     # Add common cities and areas
     tech_cities = ["Silicon Valley", "Bay Area", "Seattle", "San Francisco", 
@@ -65,6 +89,10 @@ def extract_entities(question: str) -> Dict[str, Any]:
     for city in tech_cities:
         if city.lower() in question_lower:
             geographic_entities.append(city)
+
+    for state_name in _STATE_NAME_TO_ABBR:
+        if state_name.lower() in question_lower:
+            geographic_entities.append(state_name)
     
     # Look for wealth-related terms
     wealth_terms = {
@@ -147,7 +175,8 @@ def search_graph(graph: nx.Graph, entities: List[str]) -> List[Dict[str, Any]]:
     
     # Now use semantic search with embeddings
     try:
-        if vector_store.embeddings_index is not None and len(vector_store.metadata) > 0:
+        vector_store = _get_vector_store()
+        if vector_store and vector_store.embeddings_index is not None and len(vector_store.metadata) > 0:
             # Create semantic query from entities
             query_text = " ".join(entities)
             semantic_results = vector_store.search(query_text, top_k=10)
@@ -281,6 +310,8 @@ def get_graph_rag_context(question: str, graph: nx.Graph) -> str:
     # Add trend analysis if query is trend-related
     if query_type == 'trend' and relevant_nodes:
         try:
+            from trend_analysis import analyze_wealth_gap_trends
+
             trend_analysis = analyze_wealth_gap_trends(relevant_nodes)
             context += "\n\n=== TREND ANALYSIS ===\n"
             context += f"Overall trend: {trend_analysis.get('overall_trend', {})}\n"
