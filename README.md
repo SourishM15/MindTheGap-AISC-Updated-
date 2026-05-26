@@ -59,32 +59,12 @@ MindThe_Gap is an interactive platform that combines wealth inequality metrics w
 - Python 3.13+
 - Virtual environment (recommended)
 
-### Frontend Setup
-
-```bash
-npm install
-npm run dev
-```
-
-The frontend will be available at `http://localhost:5173`
-
-### Backend Setup
-
-```bash
-cd src/backend
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-python main.py
-```
-
-The API will be available at `http://localhost:8000`
 
 ## Deployment
 
 ### Live Deployment
 
-- Frontend: https://mindthe-gap.netlify.app
+- Frontend: https://mind-the-gap-aisc-updated.vercel.app/ 
 - Backend API: https://mindthegap-api.onrender.com
 
 This project deploys as two services:
@@ -92,27 +72,6 @@ This project deploys as two services:
 - **Frontend:** Netlify builds the Vite/React app from GitHub and serves `dist/`.
 - **Backend:** Railway, Render, Fly.io, or another Python host runs the FastAPI service in `src/backend`.
 
-### Frontend Deployment on Netlify
-
-1. Push this repository to GitHub.
-2. In Netlify, choose **Add new site** > **Import an existing project** and select the GitHub repo.
-3. Use these build settings:
-
-```text
-Base directory: .
-Build command: npm run build
-Publish directory: dist
-```
-
-The repo includes `netlify.toml`, so Netlify should also detect these settings automatically. It also includes the SPA redirect rule needed for React Router so refreshed routes do not 404.
-
-After the backend is deployed, add this Netlify environment variable:
-
-```text
-VITE_API_BASE_URL=https://your-backend-host.example.com
-```
-
-Then trigger a fresh Netlify deploy. Vite reads `VITE_*` variables at build time, so changing this value requires rebuilding the frontend.
 
 ### Frontend Deployment on Vercel
 
@@ -142,24 +101,6 @@ the Vercel frontend. If Netlify remains live too, keep both origins:
 ```text
 CORS_ALLOW_ORIGINS=https://mindthe-gap.netlify.app,https://your-vercel-app.vercel.app
 ```
-
-### Backend Deployment on Railway
-
-Create a Railway service from the GitHub repo and set the service root directory
-to `src/backend`. Railway will use `src/backend/railway.json` to install Python
-dependencies, download the spaCy model, and start FastAPI with:
-
-```bash
-uvicorn main:app --host 0.0.0.0 --port $PORT
-```
-
-After Railway gives you a public backend URL, add it to Netlify as:
-
-```
-VITE_API_BASE_URL=https://your-railway-service.up.railway.app
-```
-
-Also set `CORS_ALLOW_ORIGINS` on Railway to your Netlify frontend URL.
 
 ### Backend Deployment on Render
 

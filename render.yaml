@@ -16,7 +16,7 @@ services:
       - key: ENABLE_SEMANTIC_SEARCH
         value: false
       - key: CORS_ALLOW_ORIGINS
-        value: https://mindthe-gap.netlify.app
+        value: https://mind-the-gap-aisc-updated.vercel.app
       - key: RATE_LIMIT_WINDOW_SECONDS
         value: 60
       - key: RATE_LIMIT_MAX_REQUESTS
