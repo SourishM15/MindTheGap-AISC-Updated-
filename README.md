@@ -114,6 +114,35 @@ VITE_API_BASE_URL=https://your-backend-host.example.com
 
 Then trigger a fresh Netlify deploy. Vite reads `VITE_*` variables at build time, so changing this value requires rebuilding the frontend.
 
+### Frontend Deployment on Vercel
+
+The frontend can also deploy to Vercel while keeping the FastAPI backend on
+Render.
+
+1. In Vercel, choose **Add New** > **Project** and import this GitHub repo.
+2. Use the Vite framework preset, or confirm these settings:
+
+```text
+Build command: npm run build
+Output directory: dist
+```
+
+The repo includes `vercel.json` for the build output and React Router fallback
+rewrite.
+
+Add this Vercel environment variable for Production, Preview, and Development:
+
+```text
+VITE_API_BASE_URL=https://mindthegap-api.onrender.com
+```
+
+After the Vercel URL is live, update the Render backend CORS setting to include
+the Vercel frontend. If Netlify remains live too, keep both origins:
+
+```text
+CORS_ALLOW_ORIGINS=https://mindthe-gap.netlify.app,https://your-vercel-app.vercel.app
+```
+
 ### Backend Deployment on Railway
 
 Create a Railway service from the GitHub repo and set the service root directory
